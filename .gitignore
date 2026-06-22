@@ -1,0 +1,5 @@
+# Ignores generated dependencies, build outputs, environment files, and local logs.
+node_modules/
+dist/
+.env
+*.log

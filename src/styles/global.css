@@ -1,0 +1,198 @@
+/* Global frontend styles for the inventory management starter application. */
+:root {
+  color: #172033;
+  background: #f5f7fb;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #dde3ee;
+}
+
+.navbar__brand {
+  font-weight: 700;
+}
+
+.navbar__links {
+  display: flex;
+  gap: 16px;
+}
+
+.app-shell__body {
+  display: flex;
+  flex: 1;
+}
+
+.sidebar {
+  width: 240px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #111827;
+  color: #ffffff;
+}
+
+.sidebar a {
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.sidebar a.active,
+.sidebar a:hover {
+  background: #263244;
+}
+
+.app-shell__content {
+  flex: 1;
+  padding: 28px;
+}
+
+.page-header h1 {
+  margin: 0 0 20px;
+  font-size: 28px;
+}
+
+.footer {
+  padding: 14px 24px;
+  text-align: center;
+  border-top: 1px solid #dde3ee;
+  background: #ffffff;
+}
+
+.auth-page,
+.not-found-page {
+  max-width: 440px;
+  margin: 80px auto;
+  padding: 28px;
+  background: #ffffff;
+  border: 1px solid #dde3ee;
+  border-radius: 8px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.form-input {
+  display: grid;
+  gap: 6px;
+}
+
+.form-input input,
+.search-bar {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.button {
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.button--primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.card,
+.stat-card {
+  margin-top: 18px;
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #dde3ee;
+  border-radius: 8px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.stat-card {
+  display: grid;
+  gap: 8px;
+}
+
+.stat-card strong {
+  font-size: 28px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.data-table th,
+.data-table td {
+  padding: 12px;
+  border: 1px solid #dde3ee;
+  text-align: left;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 4px solid #dde3ee;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.modal__content {
+  width: min(480px, 90vw);
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 8px;
+}
+
+@media (max-width: 760px) {
+  .app-shell__body {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+}

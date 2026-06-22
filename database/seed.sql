@@ -1,0 +1,2 @@
+-- Starter seed file for future sample Inventory Management System records.
+-- Add INSERT statements here after database tables are created.
