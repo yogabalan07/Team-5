@@ -1,0 +1,2 @@
+-- Starter schema file for future Inventory Management System database tables.
+-- Add CREATE TABLE statements here when the data model is finalized.
