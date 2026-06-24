@@ -1,7 +1,0 @@
-# Ignores Java build outputs, IDE files, local environment files, and logs.
-target/
-.env
-*.log
-.idea/
-*.iml
-.vscode/
