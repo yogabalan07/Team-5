@@ -1,0 +1,37 @@
+package com.inventory.controller;
+
+import com.inventory.model.PurchaseEntry;
+import com.inventory.service.PurchaseService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/purchases")
+@CrossOrigin(origins = "http://localhost:3000")
+public class PurchaseController {
+    @Autowired
+    private PurchaseService purchaseService;
+
+    @GetMapping
+    public ResponseEntity<List<PurchaseEntry>> getAllPurchases() {
+        return ResponseEntity.ok(purchaseService.getAllPurchases());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<PurchaseEntry> getPurchaseById(@PathVariable Long id) {
+        return ResponseEntity.ok(purchaseService.getPurchaseById(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<PurchaseEntry> createPurchase(@RequestBody PurchaseEntry purchaseEntry) {
+        return ResponseEntity.ok(purchaseService.createPurchase(purchaseEntry));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deletePurchase(@PathVariable Long id) {
+        purchaseService.deletePurchase(id);
+        return ResponseEntity.ok().build();
+    }
+}
