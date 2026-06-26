@@ -8,9 +8,18 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const currentUser = authService.getCurrentUser();
-        if (currentUser) {
-            setUser(currentUser);
+        const token = localStorage.getItem('token');
+        const userData = localStorage.getItem('user');
+        console.log('AuthContext: Token exists?', !!token);
+        console.log('AuthContext: User exists?', !!userData);
+        
+        if (token && userData) {
+            try {
+                setUser(JSON.parse(userData));
+            } catch (e) {
+                console.error('Error parsing user data', e);
+                localStorage.removeItem('user');
+            }
         }
         setLoading(false);
     }, []);
@@ -18,14 +27,22 @@ export const AuthProvider = ({ children }) => {
     const login = async (username, password) => {
         try {
             const response = await authService.login(username, password);
-            localStorage.setItem('token', response.token);
-            localStorage.setItem('user', JSON.stringify({ username: response.username }));
-            setUser({ username: response.username });
-            return { success: true };
+            console.log('Login response:', response);
+            
+            if (response.token) {
+                localStorage.setItem('token', response.token);
+                localStorage.setItem('user', JSON.stringify({ username: response.username }));
+                setUser({ username: response.username });
+                console.log('Login successful, token stored');
+                return { success: true };
+            } else {
+                return { success: false, error: 'No token received' };
+            }
         } catch (error) {
+            console.error('Login error:', error);
             return { 
                 success: false, 
-                error: error.response?.data?.message || 'Login failed' 
+                error: error.response?.data?.error || error.response?.data?.message || 'Login failed' 
             };
         }
     };
@@ -33,6 +50,7 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         authService.logout();
         setUser(null);
+        console.log('User logged out');
     };
 
     const value = {

@@ -7,7 +7,6 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-    withCredentials: true, // Add this for CORS
 });
 
 // Add token to requests
@@ -16,6 +15,9 @@ api.interceptors.request.use(
         const token = localStorage.getItem('token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
+            console.log('Token added to request:', token.substring(0, 20) + '...');
+        } else {
+            console.log('No token found in localStorage');
         }
         return config;
     },
@@ -24,9 +26,14 @@ api.interceptors.request.use(
 
 // Handle response errors
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        console.log('Response received:', response.status);
+        return response;
+    },
     (error) => {
-        if (error.response?.status === 401) {
+        console.error('API Error:', error.response?.status, error.response?.data);
+        if (error.response?.status === 401 || error.response?.status === 403) {
+            console.log('Unauthorized - redirecting to login');
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             window.location.href = '/login';
