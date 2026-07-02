@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -10,7 +10,6 @@ import {
   Alert,
   InputAdornment,
   IconButton,
-  Divider,
 } from '@mui/material';
 import {
   Visibility,
@@ -51,50 +50,99 @@ const Login = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f5f7fa',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        position: 'relative',
+        overflow: 'hidden',
         p: 2,
       }}
     >
-      <Container maxWidth="xs">
+      {/* Decorative background elements */}
+      <Box
+        sx={{
+          position: 'absolute',
+          width: '600px',
+          height: '600px',
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.05)',
+          top: '-300px',
+          right: '-200px',
+        }}
+      />
+      <Box
+        sx={{
+          position: 'absolute',
+          width: '400px',
+          height: '400px',
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.05)',
+          bottom: '-200px',
+          left: '-150px',
+        }}
+      />
+
+      <Container maxWidth="sm">
         <Paper
-          elevation={0}
+          elevation={24}
           sx={{
-            p: { xs: 4, sm: 5 },
-            borderRadius: 3,
-            background: '#ffffff',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
+            p: { xs: 3, sm: 5 },
+            borderRadius: 4,
+            backdropFilter: 'blur(10px)',
+            backgroundColor: 'rgba(255,255,255,0.95)',
+            position: 'relative',
+            zIndex: 1,
           }}
         >
+          {/* Welcome Section */}
           <Box textAlign="center" mb={4}>
+            <Typography 
+              variant="h4" 
+              fontWeight="bold" 
+              gutterBottom
+              sx={{ 
+                color: '#333',
+                fontSize: { xs: '1.75rem', sm: '2rem' }
+              }}
+            >
+              Welcome
+            </Typography>
+            
             <Typography 
               variant="h5" 
               fontWeight="bold" 
+              gutterBottom
               sx={{ 
-                color: '#1a1a2e',
-                fontSize: { xs: '1.5rem', sm: '1.75rem' }
+                color: '#667eea',
+                fontSize: { xs: '1.25rem', sm: '1.5rem' }
               }}
             >
-              Welcome Back
+              Inventory Pro
             </Typography>
+            
             <Typography 
               variant="body2" 
+              color="textSecondary"
               sx={{ 
-                color: '#8892b0',
-                mt: 0.5
+                fontSize: '0.85rem',
+                color: '#888',
+                mt: 1
               }}
             >
-              Sign in to your account
+              Enterprise Inventory Management System
             </Typography>
-            <Box
-              sx={{
-                width: 50,
-                height: 4,
-                borderRadius: 2,
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                mx: 'auto',
+
+            <Typography 
+              variant="body2" 
+              color="textSecondary"
+              sx={{ 
+                fontSize: '0.75rem',
+                color: '#aaa',
                 mt: 2,
+                maxWidth: '80%',
+                mx: 'auto'
               }}
-            />
+            >
+              Sign in to access your inventory dashboard and manage your business efficiently.
+            </Typography>
           </Box>
 
           {error && (
@@ -104,6 +152,7 @@ const Login = () => {
           )}
 
           <form onSubmit={handleSubmit}>
+            {/* Username Field */}
             <TextField
               fullWidth
               label="Username"
@@ -116,20 +165,24 @@ const Login = () => {
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Person sx={{ color: '#8892b0', fontSize: 20 }} />
+                    <Person sx={{ color: '#667eea' }} />
                   </InputAdornment>
                 ),
               }}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: 2,
-                  background: '#f8f9fa',
-                  '&:hover fieldset': { borderColor: '#667eea' },
-                  '&.Mui-focused fieldset': { borderColor: '#667eea' },
+                  '&:hover fieldset': {
+                    borderColor: '#667eea',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: '#667eea',
+                  },
                 },
               }}
             />
 
+            {/* Password Field */}
             <TextField
               fullWidth
               label="Password"
@@ -143,12 +196,15 @@ const Login = () => {
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Lock sx={{ color: '#8892b0', fontSize: 20 }} />
+                    <Lock sx={{ color: '#667eea' }} />
                   </InputAdornment>
                 ),
                 endAdornment: (
                   <InputAdornment position="end">
-                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                    <IconButton
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
@@ -157,47 +213,45 @@ const Login = () => {
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: 2,
-                  background: '#f8f9fa',
-                  '&:hover fieldset': { borderColor: '#667eea' },
-                  '&.Mui-focused fieldset': { borderColor: '#667eea' },
+                  '&:hover fieldset': {
+                    borderColor: '#667eea',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: '#667eea',
+                  },
                 },
               }}
             />
 
+            {/* Login Button */}
             <Button
               type="submit"
               fullWidth
               variant="contained"
               size="large"
               disabled={loading}
+              startIcon={<LoginIcon />}
               sx={{
                 mt: 3,
                 py: 1.5,
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 borderRadius: 2,
-                textTransform: 'none',
+                textTransform: 'uppercase',
                 fontSize: '1rem',
                 fontWeight: 'bold',
-                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)',
+                letterSpacing: 1,
                 '&:hover': {
-                  boxShadow: '0 6px 20px rgba(102, 126, 234, 0.6)',
+                  background: 'linear-gradient(135deg, #5a67d8 0%, #6b46a1 100%)',
+                },
+                '&:disabled': {
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  opacity: 0.7,
                 },
               }}
             >
-              {loading ? 'Logging in...' : 'Sign In'}
+              {loading ? 'Logging in...' : 'LOGIN'}
             </Button>
           </form>
-
-          <Box mt={3} textAlign="center">
-            <Divider sx={{ my: 2 }}>
-              <Typography variant="caption" color="textSecondary">
-                Secure login
-              </Typography>
-            </Divider>
-            <Typography variant="caption" color="textSecondary">
-              🔒 Protected by industry-standard encryption
-            </Typography>
-          </Box>
         </Paper>
       </Container>
     </Box>
