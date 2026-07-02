@@ -4,14 +4,14 @@ import com.inventory.model.ItemGroup;
 import com.inventory.repository.ItemGroupRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-
-
 @RestController
 @RequestMapping("/items/groups")
+@CrossOrigin(origins = "*")  // ✅ ADDED
 public class GroupController {
 
     @Autowired
@@ -30,11 +30,13 @@ public class GroupController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER')")  // ✅ ADDED
     public ResponseEntity<ItemGroup> createGroup(@RequestBody ItemGroup group) {
         return ResponseEntity.ok(itemGroupRepository.save(group));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER')")  // ✅ ADDED
     public ResponseEntity<ItemGroup> updateGroup(@PathVariable Long id, @RequestBody ItemGroup group) {
         return itemGroupRepository.findById(id)
                 .map(existing -> {
@@ -47,6 +49,7 @@ public class GroupController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")  // ✅ ADDED
     public ResponseEntity<?> deleteGroup(@PathVariable Long id) {
         return itemGroupRepository.findById(id)
                 .map(group -> {

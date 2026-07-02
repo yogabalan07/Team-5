@@ -4,12 +4,14 @@ import com.inventory.model.ItemSection;
 import com.inventory.repository.ItemSectionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/items/sections")
+@CrossOrigin(origins = "*")  // ✅ ADDED
 public class SectionController {
 
     @Autowired
@@ -28,11 +30,13 @@ public class SectionController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER')")  // ✅ ADDED
     public ResponseEntity<ItemSection> createSection(@RequestBody ItemSection section) {
         return ResponseEntity.ok(itemSectionRepository.save(section));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER')")  // ✅ ADDED
     public ResponseEntity<ItemSection> updateSection(@PathVariable Long id, @RequestBody ItemSection section) {
         return itemSectionRepository.findById(id)
                 .map(existing -> {
@@ -45,6 +49,7 @@ public class SectionController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")  // ✅ ADDED
     public ResponseEntity<?> deleteSection(@PathVariable Long id) {
         return itemSectionRepository.findById(id)
                 .map(section -> {

@@ -5,12 +5,14 @@ import com.inventory.repository.UnitRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/items/units")
+@CrossOrigin(origins = "*")  // ✅ ADDED
 public class UnitController {
 
     @Autowired
@@ -29,6 +31,7 @@ public class UnitController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER')")  // ✅ ADDED
     public ResponseEntity<?> createUnit(@RequestBody Unit unit) {
         try {
             Unit saved = unitRepository.save(unit);
