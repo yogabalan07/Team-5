@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+@CrossOrigin(origins = "https://ivm-33xu.onrender.com")
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
