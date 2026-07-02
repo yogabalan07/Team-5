@@ -4,22 +4,29 @@ import com.inventory.service.impl.UserDetailsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
+
+import static org.springframework.security.config.Customizer.withDefaults;
 
 @Configuration
 @EnableWebSecurity
@@ -53,13 +60,14 @@ public class SecurityConfig {
         return authConfig.getAuthenticationManager();
     }
 
-    // 🌐 CORS CONFIG (VERY IMPORTANT FOR FRONTEND CONNECTION)
+    // 🌐 CORS CONFIG (VERY IMPORTANT)
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+
         CorsConfiguration configuration = new CorsConfiguration();
 
         configuration.setAllowedOrigins(List.of(
-                "https://ivm-33xu.onrender.com" // ✅ your frontend URL
+                "https://ivm-33xu.onrender.com" // ✅ your frontend
         ));
 
         configuration.setAllowedMethods(List.of(
@@ -67,6 +75,7 @@ public class SecurityConfig {
         ));
 
         configuration.setAllowedHeaders(List.of("*"));
+
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -75,34 +84,29 @@ public class SecurityConfig {
         return source;
     }
 
-    // 🔥 SECURITY FILTER CHAIN (FIXED VERSION)
+    // 🔥 MAIN SECURITY CONFIG (FINAL FIX)
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-            .cors(cors -> {}) // ✅ FIXED (important)
+            .cors(withDefaults()) // ✅ FIXED (CRITICAL)
             .csrf(csrf -> csrf.disable())
 
             .sessionManagement(session ->
                     session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
 
-            .authorizeHttpRequests(authz -> authz
+            .authorizeHttpRequests(auth -> auth
 
-                // ✅ HEALTH CHECK (Render needs this)
-                .requestMatchers("/actuator/health").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
-                .requestMatchers("/health").permitAll()
-
-                // ✅ AUTH APIs
+                // ✅ PUBLIC ENDPOINTS
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
 
-                // ✅ SWAGGER (optional)
-                .requestMatchers("/swagger-ui/**").permitAll()
-                .requestMatchers("/v3/api-docs/**").permitAll()
+                // ✅ RENDER HEALTH CHECK
+                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/health").permitAll()
 
-                // 🔒 ALL OTHER APIs REQUIRE LOGIN
+                // 🔒 PROTECTED
                 .anyRequest().authenticated()
             )
 
