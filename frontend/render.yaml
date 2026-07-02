@@ -1,8 +1,9 @@
+# render.yaml - Place in frontend root
 services:
   - type: web
-    name: inventory-pro-frontend
+    name: inventory-frontend
     env: static
-    buildCommand: npm run build
+    buildCommand: npm install && npm run build
     staticPublishPath: build
     routes:
       - type: rewrite
