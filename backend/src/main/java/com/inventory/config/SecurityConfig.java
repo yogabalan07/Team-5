@@ -5,6 +5,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import org.springframework.http.HttpMethod;
+
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -60,14 +62,14 @@ public class SecurityConfig {
         return authConfig.getAuthenticationManager();
     }
 
-    // 🌐 CORS CONFIG (VERY IMPORTANT)
+    // 🌐 CORS CONFIG (CRITICAL)
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
         CorsConfiguration configuration = new CorsConfiguration();
 
         configuration.setAllowedOrigins(List.of(
-                "https://ivm-33xu.onrender.com" // ✅ your frontend
+                "https://ivm-33xu.onrender.com" // ✅ frontend URL
         ));
 
         configuration.setAllowedMethods(List.of(
@@ -75,7 +77,6 @@ public class SecurityConfig {
         ));
 
         configuration.setAllowedHeaders(List.of("*"));
-
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -84,12 +85,12 @@ public class SecurityConfig {
         return source;
     }
 
-    // 🔥 MAIN SECURITY CONFIG (FINAL FIX)
+    // 🔥 SECURITY FILTER CHAIN (FINAL)
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-            .cors(withDefaults()) // ✅ FIXED (CRITICAL)
+            .cors(withDefaults()) // ✅ enable CORS
             .csrf(csrf -> csrf.disable())
 
             .sessionManagement(session ->
@@ -98,11 +99,14 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
 
+                // ✅ VERY IMPORTANT → FIXES YOUR ERROR
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                 // ✅ PUBLIC ENDPOINTS
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
 
-                // ✅ RENDER HEALTH CHECK
+                // ✅ HEALTH CHECK (Render)
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/health").permitAll()
 
