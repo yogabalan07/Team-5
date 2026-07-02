@@ -10,6 +10,7 @@ import {
   Alert,
   InputAdornment,
   IconButton,
+  Divider,
 } from '@mui/material';
 import {
   Visibility,
@@ -50,69 +51,27 @@ const Login = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0c0e1a 0%, #1a1a3e 50%, #2d1b69 100%)',
-        position: 'relative',
-        overflow: 'hidden',
+        background: '#f5f7fa',
         p: 2,
       }}
     >
-      {/* Animated floating particles */}
-      {[...Array(20)].map((_, i) => (
-        <Box
-          key={i}
-          sx={{
-            position: 'absolute',
-            width: Math.random() * 6 + 2,
-            height: Math.random() * 6 + 2,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.1)',
-            top: Math.random() * 100 + '%',
-            left: Math.random() * 100 + '%',
-            animation: `float ${Math.random() * 10 + 5}s infinite ease-in-out`,
-            '@keyframes float': {
-              '0%, 100%': { transform: 'translateY(0px)' },
-              '50%': { transform: `translateY(-${Math.random() * 30 + 10}px)` },
-            },
-          }}
-        />
-      ))}
-
-      <Container maxWidth="sm">
+      <Container maxWidth="xs">
         <Paper
+          elevation={0}
           sx={{
             p: { xs: 4, sm: 5 },
-            borderRadius: 4,
-            background: 'rgba(255,255,255,0.05)',
-            backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
-            position: 'relative',
-            zIndex: 1,
+            borderRadius: 3,
+            background: '#ffffff',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
           }}
         >
           <Box textAlign="center" mb={4}>
-            <Box
-              sx={{
-                width: 80,
-                height: 80,
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                mx: 'auto',
-                mb: 2,
-                fontSize: 40,
-              }}
-            >
-              📦
-            </Box>
             <Typography 
-              variant="h4" 
+              variant="h5" 
               fontWeight="bold" 
               sx={{ 
-                color: '#fff',
-                fontSize: { xs: '1.75rem', sm: '2rem' }
+                color: '#1a1a2e',
+                fontSize: { xs: '1.5rem', sm: '1.75rem' }
               }}
             >
               Welcome Back
@@ -120,12 +79,22 @@ const Login = () => {
             <Typography 
               variant="body2" 
               sx={{ 
-                color: 'rgba(255,255,255,0.7)',
-                mt: 1
+                color: '#8892b0',
+                mt: 0.5
               }}
             >
-              Sign in to continue to Inventory Pro
+              Sign in to your account
             </Typography>
+            <Box
+              sx={{
+                width: 50,
+                height: 4,
+                borderRadius: 2,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                mx: 'auto',
+                mt: 2,
+              }}
+            />
           </Box>
 
           {error && (
@@ -147,20 +116,17 @@ const Login = () => {
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Person sx={{ color: '#667eea' }} />
+                    <Person sx={{ color: '#8892b0', fontSize: 20 }} />
                   </InputAdornment>
                 ),
               }}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: 2,
-                  color: '#fff',
-                  '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                  background: '#f8f9fa',
                   '&:hover fieldset': { borderColor: '#667eea' },
                   '&.Mui-focused fieldset': { borderColor: '#667eea' },
                 },
-                '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.7)' },
-                '& .MuiInputLabel-root.Mui-focused': { color: '#667eea' },
               }}
             />
 
@@ -177,13 +143,13 @@ const Login = () => {
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Lock sx={{ color: '#667eea' }} />
+                    <Lock sx={{ color: '#8892b0', fontSize: 20 }} />
                   </InputAdornment>
                 ),
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
-                      {showPassword ? <VisibilityOff sx={{ color: 'rgba(255,255,255,0.7)' }} /> : <Visibility sx={{ color: 'rgba(255,255,255,0.7)' }} />}
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
                 ),
@@ -191,13 +157,10 @@ const Login = () => {
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: 2,
-                  color: '#fff',
-                  '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                  background: '#f8f9fa',
                   '&:hover fieldset': { borderColor: '#667eea' },
                   '&.Mui-focused fieldset': { borderColor: '#667eea' },
                 },
-                '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.7)' },
-                '& .MuiInputLabel-root.Mui-focused': { color: '#667eea' },
               }}
             />
 
@@ -215,15 +178,26 @@ const Login = () => {
                 textTransform: 'none',
                 fontSize: '1rem',
                 fontWeight: 'bold',
+                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)',
                 '&:hover': {
-                  transform: 'scale(1.02)',
-                  transition: 'transform 0.2s',
+                  boxShadow: '0 6px 20px rgba(102, 126, 234, 0.6)',
                 },
               }}
             >
               {loading ? 'Logging in...' : 'Sign In'}
             </Button>
           </form>
+
+          <Box mt={3} textAlign="center">
+            <Divider sx={{ my: 2 }}>
+              <Typography variant="caption" color="textSecondary">
+                Secure login
+              </Typography>
+            </Divider>
+            <Typography variant="caption" color="textSecondary">
+              🔒 Protected by industry-standard encryption
+            </Typography>
+          </Box>
         </Paper>
       </Container>
     </Box>
