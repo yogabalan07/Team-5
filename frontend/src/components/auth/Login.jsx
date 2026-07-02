@@ -10,6 +10,7 @@ import {
   Alert,
   InputAdornment,
   IconButton,
+  Divider,
 } from '@mui/material';
 import {
   Visibility,
@@ -49,99 +50,28 @@ const Login = () => {
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        position: 'relative',
-        overflow: 'hidden',
-        p: 2,
       }}
     >
-      {/* Decorative background elements */}
-      <Box
-        sx={{
-          position: 'absolute',
-          width: '600px',
-          height: '600px',
-          borderRadius: '50%',
-          background: 'rgba(255,255,255,0.05)',
-          top: '-300px',
-          right: '-200px',
-        }}
-      />
-      <Box
-        sx={{
-          position: 'absolute',
-          width: '400px',
-          height: '400px',
-          borderRadius: '50%',
-          background: 'rgba(255,255,255,0.05)',
-          bottom: '-200px',
-          left: '-150px',
-        }}
-      />
-
       <Container maxWidth="sm">
         <Paper
           elevation={24}
           sx={{
-            p: { xs: 3, sm: 5 },
+            p: 5,
             borderRadius: 4,
             backdropFilter: 'blur(10px)',
             backgroundColor: 'rgba(255,255,255,0.95)',
-            position: 'relative',
-            zIndex: 1,
           }}
         >
-          {/* Welcome Section */}
           <Box textAlign="center" mb={4}>
-            <Typography 
-              variant="h4" 
-              fontWeight="bold" 
-              gutterBottom
-              sx={{ 
-                color: '#333',
-                fontSize: { xs: '1.75rem', sm: '2rem' }
-              }}
-            >
-              Welcome
+            <Typography variant="h3" sx={{ mb: 1 }}>
+      
             </Typography>
-            
-            <Typography 
-              variant="h5" 
-              fontWeight="bold" 
-              gutterBottom
-              sx={{ 
-                color: '#667eea',
-                fontSize: { xs: '1.25rem', sm: '1.5rem' }
-              }}
-            >
+            <Typography variant="h4" fontWeight="bold" gutterBottom>
               Inventory Pro
             </Typography>
-            
-            <Typography 
-              variant="body2" 
-              color="textSecondary"
-              sx={{ 
-                fontSize: '0.85rem',
-                color: '#888',
-                mt: 1
-              }}
-            >
+            <Typography variant="body2" color="textSecondary">
               Enterprise Inventory Management System
-            </Typography>
-
-            <Typography 
-              variant="body2" 
-              color="textSecondary"
-              sx={{ 
-                fontSize: '0.75rem',
-                color: '#aaa',
-                mt: 2,
-                maxWidth: '80%',
-                mx: 'auto'
-              }}
-            >
-              Sign in to access your inventory dashboard and manage your business efficiently.
             </Typography>
           </Box>
 
@@ -152,7 +82,6 @@ const Login = () => {
           )}
 
           <form onSubmit={handleSubmit}>
-            {/* Username Field */}
             <TextField
               fullWidth
               label="Username"
@@ -161,28 +90,14 @@ const Login = () => {
               onChange={(e) => setUsername(e.target.value)}
               margin="normal"
               required
-              placeholder="Enter your username"
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Person sx={{ color: '#667eea' }} />
+                    <Person color="primary" />
                   </InputAdornment>
                 ),
               }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  '&:hover fieldset': {
-                    borderColor: '#667eea',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: '#667eea',
-                  },
-                },
-              }}
             />
-
-            {/* Password Field */}
             <TextField
               fullWidth
               label="Password"
@@ -192,11 +107,10 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)}
               margin="normal"
               required
-              placeholder="Enter your password"
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Lock sx={{ color: '#667eea' }} />
+                    <Lock color="primary" />
                   </InputAdornment>
                 ),
                 endAdornment: (
@@ -210,20 +124,7 @@ const Login = () => {
                   </InputAdornment>
                 ),
               }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  '&:hover fieldset': {
-                    borderColor: '#667eea',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: '#667eea',
-                  },
-                },
-              }}
             />
-
-            {/* Login Button */}
             <Button
               type="submit"
               fullWidth
@@ -235,23 +136,20 @@ const Login = () => {
                 mt: 3,
                 py: 1.5,
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                borderRadius: 2,
-                textTransform: 'uppercase',
-                fontSize: '1rem',
-                fontWeight: 'bold',
-                letterSpacing: 1,
                 '&:hover': {
                   background: 'linear-gradient(135deg, #5a67d8 0%, #6b46a1 100%)',
                 },
-                '&:disabled': {
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  opacity: 0.7,
-                },
               }}
             >
-              {loading ? 'Logging in...' : 'LOGIN'}
+              {loading ? 'Logging in...' : 'Sign In'}
             </Button>
           </form>
+
+          <Box mt={3} textAlign="center">
+          
+            <Divider sx={{ my: 2 }} />
+      
+          </Box>
         </Paper>
       </Container>
     </Box>
