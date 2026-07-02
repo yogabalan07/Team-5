@@ -1,4 +1,5 @@
-# Build stage - Use Maven with Eclipse Temurin (OpenJDK)
+# ==================== BUILD STAGE ====================
+# Use Maven with Eclipse Temurin (OpenJDK) for building
 FROM maven:3.9.6-eclipse-temurin-17-alpine AS build
 
 # Set working directory
@@ -13,20 +14,21 @@ RUN mvn dependency:go-offline
 # Copy source code
 COPY src ./src
 
-# Build the application
+# Build the application (skip tests for faster build)
 RUN mvn clean package -DskipTests
 
-# Runtime stage - Use Eclipse Temurin (OpenJDK)
+# ==================== RUNTIME STAGE ====================
+# Use lightweight Eclipse Temurin JRE for running
 FROM eclipse-temurin:17-jdk-alpine
 
 # Set working directory
 WORKDIR /app
 
-# Copy jar from build stage
+# Copy the JAR from the build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Expose port
+# Expose the port your app runs on
 EXPOSE 8080
 
-# Run the application with proper JVM options
+# Run the application
 ENTRYPOINT ["java", "-jar", "app.jar"]
