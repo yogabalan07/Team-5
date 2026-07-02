@@ -18,7 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity(prePostEnabled = false)  // ⭐ DISABLE @PreAuthorize - THIS IS KEY!
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Autowired
@@ -52,12 +52,24 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
-                // ⭐ ALLOW ALL REQUESTS - NO AUTHENTICATION NEEDED
-                .anyRequest().permitAll()
+                // ⭐ ALLOW HEALTH CHECKS AND ACTUATOR ENDPOINTS (Render needs these)
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/health").permitAll()
+                
+                // ⭐ ALLOW AUTHENTICATION ENDPOINTS
+                .requestMatchers("/auth/**").permitAll()
+                .requestMatchers("/api/auth/**").permitAll()
+                
+                // ⭐ ALLOW SWAGGER/API DOCS (if you have them)
+                .requestMatchers("/swagger-ui/**").permitAll()
+                .requestMatchers("/v3/api-docs/**").permitAll()
+                
+                // ⭐ ALL OTHER REQUESTS REQUIRE AUTHENTICATION
+                .anyRequest().authenticated()
             )
-            // ⭐ COMMENT OUT OR REMOVE THE JWT FILTER - IT'S NOT NEEDED NOW
-            // .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            ;
+            // ⭐ RE-ENABLE JWT FILTER
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
