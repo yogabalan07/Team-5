@@ -1,7 +1,8 @@
+// src/services/api.js
 import axios from 'axios';
 
-// ✅ FIXED: Remove /api from baseURL (context-path handles it)
-const API_URL = process.env.REACT_APP_API_URL || 'https://ivm-backend-5tmk.onrender.com';
+// ✅ PRODUCTION ONLY - Hardcoded for Render
+const API_URL = 'https://ivm-backend-5tmk.onrender.com/api';
 
 console.log('🌐 API Base URL:', API_URL);
 
