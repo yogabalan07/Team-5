@@ -10,8 +10,11 @@ import com.inventory.model.*;
 import com.inventory.repository.*;
 import com.inventory.service.SalesService;
 import com.inventory.util.InvoiceGenerator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +30,8 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 public class SalesServiceImpl implements SalesService {
+
+    private static final Logger logger = LoggerFactory.getLogger(SalesServiceImpl.class);
 
     @Autowired
     private SalesInvoiceRepository salesInvoiceRepository;
@@ -183,17 +188,70 @@ public class SalesServiceImpl implements SalesService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public SalesInvoiceResponse getSalesInvoiceByInvoiceNo(String invoiceNo) {
-        SalesInvoice invoice = salesInvoiceRepository.findByInvoiceNo(invoiceNo)
-            .orElseThrow(() -> new ResourceNotFoundException("Invoice not found: " + invoiceNo));
-        return convertToResponse(invoice);
+        try {
+            logger.info("📄 Fetching invoice with invoice number: {}", invoiceNo);
+            SalesInvoice invoice = salesInvoiceRepository.findByInvoiceNo(invoiceNo)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found: " + invoiceNo));
+            
+            // Force initialization of lazy collections
+            initializeInvoiceData(invoice);
+            
+            return convertToResponse(invoice);
+        } catch (Exception e) {
+            logger.error("❌ Error fetching invoice by invoiceNo {}: {}", invoiceNo, e.getMessage(), e);
+            throw e;
+        }
     }
 
     @Override
+    @Transactional(readOnly = true)
     public SalesInvoiceResponse getSalesInvoiceById(Long id) {
-        SalesInvoice invoice = salesInvoiceRepository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Invoice not found with id: " + id));
-        return convertToResponse(invoice);
+        try {
+            logger.info("📄 Fetching sales invoice with ID: {}", id);
+            
+            SalesInvoice invoice = salesInvoiceRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found with id: " + id));
+            
+            // Force initialization of lazy collections
+            initializeInvoiceData(invoice);
+            
+            return convertToResponse(invoice);
+        } catch (ResourceNotFoundException e) {
+            logger.warn("⚠️ Invoice not found with ID: {}", id);
+            throw e;
+        } catch (Exception e) {
+            logger.error("❌ Error fetching invoice {}: {}", id, e.getMessage(), e);
+            throw new RuntimeException("Failed to fetch invoice: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Initialize lazy-loaded collections to avoid LazyInitializationException
+     */
+    private void initializeInvoiceData(SalesInvoice invoice) {
+        if (invoice == null) return;
+        
+        // Force initialization of customer proxy
+        if (invoice.getCustomer() != null) {
+            invoice.getCustomer().getId();
+            invoice.getCustomer().getName();
+            invoice.getCustomer().getPhone();
+        }
+        
+        // Force initialization of items collection
+        if (invoice.getItems() != null) {
+            invoice.getItems().size();
+            for (SalesInvoiceItem item : invoice.getItems()) {
+                if (item.getItem() != null) {
+                    item.getItem().getId();
+                    item.getItem().getName();
+                }
+            }
+        }
+        
+        logger.debug("✅ Invoice data initialized for ID: {}", invoice.getId());
     }
 
     @Override
@@ -226,7 +284,7 @@ public class SalesServiceImpl implements SalesService {
             .map(this::convertToResponse)
             .collect(Collectors.toList());
         
-        return new org.springframework.data.domain.PageImpl<>(responses, pageable, allInvoices.size());
+        return new PageImpl<>(responses, pageable, allInvoices.size());
     }
 
     @Override
@@ -277,7 +335,7 @@ public class SalesServiceImpl implements SalesService {
     @Transactional
     public void deleteSalesInvoice(Long id) {
         try {
-            System.out.println("🗑️ Attempting to delete sales invoice with ID: " + id);
+            logger.info("🗑️ Attempting to delete sales invoice with ID: {}", id);
             
             SalesInvoice invoice = salesInvoiceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Sales invoice not found with id: " + id));
@@ -305,9 +363,8 @@ public class SalesServiceImpl implements SalesService {
                 stockTransaction.setUnitPrice(item.getUnitPrice());
                 stockTransactionRepository.save(stockTransaction);
                 
-                System.out.println("📦 Stock restored for item: " + inventoryItem.getName() + 
-                    " | Previous: " + oldStock + " | Restored: " + item.getQuantity() + 
-                    " | New: " + newStock);
+                logger.debug("📦 Stock restored for item: {} | Previous: {} | Restored: {} | New: {}", 
+                    inventoryItem.getName(), oldStock, item.getQuantity(), newStock);
             }
 
             // Reverse credit balance if credit sale
@@ -317,8 +374,8 @@ public class SalesServiceImpl implements SalesService {
                 BigDecimal newBalance = oldBalance.subtract(invoice.getNetAmount());
                 customer.setCreditBalance(newBalance);
                 customerRepository.save(customer);
-                System.out.println("💳 Credit balance updated for customer: " + customer.getName() + 
-                    " | Old: " + oldBalance + " | New: " + newBalance);
+                logger.debug("💳 Credit balance updated for customer: {} | Old: {} | New: {}", 
+                    customer.getName(), oldBalance, newBalance);
             }
 
             // Delete invoice items
@@ -326,11 +383,10 @@ public class SalesServiceImpl implements SalesService {
             
             // Delete invoice
             salesInvoiceRepository.delete(invoice);
-            System.out.println("✅ Sales invoice deleted: " + id + " - " + invoice.getInvoiceNo());
+            logger.info("✅ Sales invoice deleted: {} - {}", id, invoice.getInvoiceNo());
             
         } catch (Exception e) {
-            System.err.println("❌ Error deleting sales invoice: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("❌ Error deleting sales invoice: {}", e.getMessage(), e);
             throw new BusinessException("Cannot delete invoice: " + e.getMessage());
         }
     }
@@ -344,46 +400,51 @@ public class SalesServiceImpl implements SalesService {
     }
 
     private SalesInvoiceResponse convertToResponse(SalesInvoice invoice) {
-        List<SalesInvoiceResponse.SalesInvoiceItemResponse> itemResponses = new ArrayList<>();
-        if (invoice.getItems() != null) {
-            for (SalesInvoiceItem item : invoice.getItems()) {
-                itemResponses.add(
-                    SalesInvoiceResponse.SalesInvoiceItemResponse.builder()
-                        .id(item.getId())
-                        .itemId(item.getItem() != null ? item.getItem().getId() : null)
-                        .itemName(item.getItem() != null ? item.getItem().getName() : null)
-                        .itemCode(item.getItem() != null ? item.getItem().getCode() : null)
-                        .quantity(item.getQuantity())
-                        .unitPrice(item.getUnitPrice())
-                        .discountPercent(item.getDiscountPercent())
-                        .taxPercent(item.getTaxPercent())
-                        .totalAmount(item.getTotalAmount())
-                        .build()
-                );
+        try {
+            List<SalesInvoiceResponse.SalesInvoiceItemResponse> itemResponses = new ArrayList<>();
+            if (invoice.getItems() != null) {
+                for (SalesInvoiceItem item : invoice.getItems()) {
+                    itemResponses.add(
+                        SalesInvoiceResponse.SalesInvoiceItemResponse.builder()
+                            .id(item.getId())
+                            .itemId(item.getItem() != null ? item.getItem().getId() : null)
+                            .itemName(item.getItem() != null ? item.getItem().getName() : null)
+                            .itemCode(item.getItem() != null ? item.getItem().getCode() : null)
+                            .quantity(item.getQuantity())
+                            .unitPrice(item.getUnitPrice())
+                            .discountPercent(item.getDiscountPercent())
+                            .taxPercent(item.getTaxPercent())
+                            .totalAmount(item.getTotalAmount())
+                            .build()
+                    );
+                }
             }
-        }
 
-        return SalesInvoiceResponse.builder()
-            .id(invoice.getId())
-            .invoiceNo(invoice.getInvoiceNo())
-            .invoiceDate(invoice.getInvoiceDate())
-            .customerId(invoice.getCustomer() != null ? invoice.getCustomer().getId() : null)
-            .customerName(invoice.getCustomer() != null ? invoice.getCustomer().getName() : null)
-            .customerPhone(invoice.getCustomer() != null ? invoice.getCustomer().getPhone() : null)
-            .totalAmount(invoice.getTotalAmount())
-            .discountAmount(invoice.getDiscountAmount())
-            .taxAmount(invoice.getTaxAmount())
-            .netAmount(invoice.getNetAmount())
-            .paidAmount(invoice.getPaidAmount())
-            .balanceAmount(invoice.getBalanceAmount())
-            .paymentType(invoice.getPaymentType() != null ? invoice.getPaymentType().toString() : null)
-            .paymentMode(invoice.getPaymentMode()) // ⭐ ADD paymentMode
-            .referenceNo(invoice.getReferenceNo())
-            .notes(invoice.getNotes())
-            .isReturned(invoice.getIsReturned())
-            .createdBy(invoice.getCreatedBy() != null ? invoice.getCreatedBy().getUsername() : null)
-            .createdAt(invoice.getCreatedAt())
-            .items(itemResponses)
-            .build();
+            return SalesInvoiceResponse.builder()
+                .id(invoice.getId())
+                .invoiceNo(invoice.getInvoiceNo())
+                .invoiceDate(invoice.getInvoiceDate())
+                .customerId(invoice.getCustomer() != null ? invoice.getCustomer().getId() : null)
+                .customerName(invoice.getCustomer() != null ? invoice.getCustomer().getName() : null)
+                .customerPhone(invoice.getCustomer() != null ? invoice.getCustomer().getPhone() : null)
+                .totalAmount(invoice.getTotalAmount())
+                .discountAmount(invoice.getDiscountAmount())
+                .taxAmount(invoice.getTaxAmount())
+                .netAmount(invoice.getNetAmount())
+                .paidAmount(invoice.getPaidAmount())
+                .balanceAmount(invoice.getBalanceAmount())
+                .paymentType(invoice.getPaymentType() != null ? invoice.getPaymentType().toString() : null)
+                .paymentMode(invoice.getPaymentMode())
+                .referenceNo(invoice.getReferenceNo())
+                .notes(invoice.getNotes())
+                .isReturned(invoice.getIsReturned())
+                .createdBy(invoice.getCreatedBy() != null ? invoice.getCreatedBy().getUsername() : null)
+                .createdAt(invoice.getCreatedAt())
+                .items(itemResponses)
+                .build();
+        } catch (Exception e) {
+            logger.error("❌ Error converting invoice to response: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to convert invoice data: " + e.getMessage());
+        }
     }
 }
