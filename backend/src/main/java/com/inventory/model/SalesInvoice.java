@@ -28,7 +28,7 @@ public class SalesInvoice {
     @Column(name = "invoice_date", nullable = false)
     private LocalDate invoiceDate;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)  // ✅ Changed from LAZY to EAGER
     @JoinColumn(name = "customer_id")
     private Customer customer;
 
@@ -54,7 +54,7 @@ public class SalesInvoice {
     @Enumerated(EnumType.STRING)
     private PaymentType paymentType;
 
-    @Column(name = "payment_mode", length = 20)  // ⭐ ADD THIS
+    @Column(name = "payment_mode", length = 20)
     private String paymentMode; // "CASH" or "CREDIT"
 
     @Column(name = "reference_no", length = 50)
@@ -76,14 +76,13 @@ public class SalesInvoice {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, fetch = FetchType.EAGER)  // ✅ Changed from LAZY to EAGER
     private List<SalesInvoiceItem> items = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        // Set paymentMode based on paymentType if not set
         if (paymentMode == null && paymentType != null) {
             paymentMode = paymentType.name();
         }
