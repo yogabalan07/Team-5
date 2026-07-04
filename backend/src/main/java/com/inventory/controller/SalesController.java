@@ -65,6 +65,13 @@ public class SalesController {
         }
     }
 
+    // ✅ FIX: Added support for /sales/invoice/23 (without /id/)
+    @GetMapping("/invoice/{id}")
+    public ResponseEntity<?> getInvoiceById(@PathVariable Long id) {
+        return getSalesInvoiceById(id);
+    }
+
+    // ✅ Original endpoint with /id/
     @GetMapping("/invoice/id/{id}")
     public ResponseEntity<?> getSalesInvoiceById(@PathVariable Long id) {
         try {
