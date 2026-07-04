@@ -22,8 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -82,7 +84,7 @@ public class SalesServiceImpl implements SalesService {
         // Set payment type and payment mode
         PaymentType paymentType = PaymentType.valueOf(request.getPaymentType().toUpperCase());
         invoice.setPaymentType(paymentType);
-        invoice.setPaymentMode(request.getPaymentType().toUpperCase()); // "CASH" or "CREDIT"
+        invoice.setPaymentMode(request.getPaymentType().toUpperCase());
         
         invoice.setReferenceNo(request.getReferenceNo());
         invoice.setNotes(request.getNotes());
@@ -195,9 +197,7 @@ public class SalesServiceImpl implements SalesService {
             SalesInvoice invoice = salesInvoiceRepository.findByInvoiceNo(invoiceNo)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found: " + invoiceNo));
             
-            // Force initialization of lazy collections
-            initializeInvoiceData(invoice);
-            
+            initializeInvoiceDataSafely(invoice);
             return convertToResponse(invoice);
         } catch (Exception e) {
             logger.error("❌ Error fetching invoice by invoiceNo {}: {}", invoiceNo, e.getMessage(), e);
@@ -214,10 +214,9 @@ public class SalesServiceImpl implements SalesService {
             SalesInvoice invoice = salesInvoiceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found with id: " + id));
             
-            // Force initialization of lazy collections
-            initializeInvoiceData(invoice);
-            
+            initializeInvoiceDataSafely(invoice);
             return convertToResponse(invoice);
+            
         } catch (ResourceNotFoundException e) {
             logger.warn("⚠️ Invoice not found with ID: {}", id);
             throw e;
@@ -228,30 +227,39 @@ public class SalesServiceImpl implements SalesService {
     }
 
     /**
-     * Initialize lazy-loaded collections to avoid LazyInitializationException
+     * Safely initialize lazy-loaded collections
      */
-    private void initializeInvoiceData(SalesInvoice invoice) {
+    private void initializeInvoiceDataSafely(SalesInvoice invoice) {
         if (invoice == null) return;
         
-        // Force initialization of customer proxy
-        if (invoice.getCustomer() != null) {
-            invoice.getCustomer().getId();
-            invoice.getCustomer().getName();
-            invoice.getCustomer().getPhone();
-        }
-        
-        // Force initialization of items collection
-        if (invoice.getItems() != null) {
-            invoice.getItems().size();
-            for (SalesInvoiceItem item : invoice.getItems()) {
-                if (item.getItem() != null) {
-                    item.getItem().getId();
-                    item.getItem().getName();
-                }
+        try {
+            // Safely initialize customer
+            if (invoice.getCustomer() != null) {
+                Customer customer = invoice.getCustomer();
+                customer.getId();
+                customer.getName();
+                customer.getPhone();
+                logger.debug("✅ Customer initialized: {}", customer.getName());
             }
+        } catch (Exception e) {
+            logger.warn("⚠️ Could not initialize customer: {}", e.getMessage());
         }
         
-        logger.debug("✅ Invoice data initialized for ID: {}", invoice.getId());
+        try {
+            // Safely initialize items
+            if (invoice.getItems() != null) {
+                invoice.getItems().size();
+                for (SalesInvoiceItem item : invoice.getItems()) {
+                    if (item.getItem() != null) {
+                        item.getItem().getId();
+                        item.getItem().getName();
+                    }
+                }
+                logger.debug("✅ Items initialized: {} items", invoice.getItems().size());
+            }
+        } catch (Exception e) {
+            logger.warn("⚠️ Could not initialize items: {}", e.getMessage());
+        }
     }
 
     @Override
@@ -305,7 +313,6 @@ public class SalesServiceImpl implements SalesService {
             PaymentType newPaymentType = PaymentType.valueOf(request.getPaymentType().toUpperCase());
             
             if (oldPaymentType != newPaymentType) {
-                // Update payment mode
                 invoice.setPaymentMode(request.getPaymentType().toUpperCase());
                 
                 if (newPaymentType == PaymentType.CASH) {
@@ -352,7 +359,6 @@ public class SalesServiceImpl implements SalesService {
                 inventoryItem.setCurrentStock(newStock);
                 itemRepository.save(inventoryItem);
                 
-                // Record stock transaction for reversal
                 StockTransaction stockTransaction = new StockTransaction();
                 stockTransaction.setItem(inventoryItem);
                 stockTransaction.setTransactionType(TransactionType.RETURN_IN);
@@ -378,10 +384,7 @@ public class SalesServiceImpl implements SalesService {
                     customer.getName(), oldBalance, newBalance);
             }
 
-            // Delete invoice items
             salesInvoiceItemRepository.deleteAll(invoice.getItems());
-            
-            // Delete invoice
             salesInvoiceRepository.delete(invoice);
             logger.info("✅ Sales invoice deleted: {} - {}", id, invoice.getInvoiceNo());
             
@@ -399,49 +402,90 @@ public class SalesServiceImpl implements SalesService {
         return total;
     }
 
+    /**
+     * Safely convert invoice to response with null handling
+     */
     private SalesInvoiceResponse convertToResponse(SalesInvoice invoice) {
         try {
+            logger.debug("🔄 Converting invoice {} to response", invoice.getId());
+            
             List<SalesInvoiceResponse.SalesInvoiceItemResponse> itemResponses = new ArrayList<>();
-            if (invoice.getItems() != null) {
+            if (invoice.getItems() != null && !invoice.getItems().isEmpty()) {
                 for (SalesInvoiceItem item : invoice.getItems()) {
-                    itemResponses.add(
-                        SalesInvoiceResponse.SalesInvoiceItemResponse.builder()
-                            .id(item.getId())
-                            .itemId(item.getItem() != null ? item.getItem().getId() : null)
-                            .itemName(item.getItem() != null ? item.getItem().getName() : null)
-                            .itemCode(item.getItem() != null ? item.getItem().getCode() : null)
-                            .quantity(item.getQuantity())
-                            .unitPrice(item.getUnitPrice())
-                            .discountPercent(item.getDiscountPercent())
-                            .taxPercent(item.getTaxPercent())
-                            .totalAmount(item.getTotalAmount())
-                            .build()
-                    );
+                    try {
+                        String itemName = "Unknown Item";
+                        String itemCode = null;
+                        Long itemId = null;
+                        
+                        if (item.getItem() != null) {
+                            try {
+                                itemId = item.getItem().getId();
+                                itemName = item.getItem().getName() != null ? 
+                                    item.getItem().getName() : "Unknown Item";
+                                itemCode = item.getItem().getCode();
+                            } catch (Exception e) {
+                                logger.warn("⚠️ Could not get item details: {}", e.getMessage());
+                            }
+                        }
+                        
+                        itemResponses.add(
+                            SalesInvoiceResponse.SalesInvoiceItemResponse.builder()
+                                .id(item.getId())
+                                .itemId(itemId)
+                                .itemName(itemName)
+                                .itemCode(itemCode)
+                                .quantity(item.getQuantity() != null ? item.getQuantity() : BigDecimal.ZERO)
+                                .unitPrice(item.getUnitPrice() != null ? item.getUnitPrice() : BigDecimal.ZERO)
+                                .discountPercent(item.getDiscountPercent() != null ? item.getDiscountPercent() : BigDecimal.ZERO)
+                                .taxPercent(item.getTaxPercent() != null ? item.getTaxPercent() : BigDecimal.ZERO)
+                                .totalAmount(item.getTotalAmount() != null ? item.getTotalAmount() : BigDecimal.ZERO)
+                                .build()
+                        );
+                    } catch (Exception e) {
+                        logger.warn("⚠️ Could not convert invoice item: {}", e.getMessage());
+                    }
                 }
+            }
+
+            // Safely get customer details
+            String customerName = "Unknown Customer";
+            String customerPhone = null;
+            Long customerId = null;
+            
+            try {
+                if (invoice.getCustomer() != null) {
+                    Customer customer = invoice.getCustomer();
+                    customerId = customer.getId();
+                    customerName = customer.getName() != null ? customer.getName() : "Unknown Customer";
+                    customerPhone = customer.getPhone();
+                }
+            } catch (Exception e) {
+                logger.warn("⚠️ Could not get customer details: {}", e.getMessage());
             }
 
             return SalesInvoiceResponse.builder()
                 .id(invoice.getId())
-                .invoiceNo(invoice.getInvoiceNo())
-                .invoiceDate(invoice.getInvoiceDate())
-                .customerId(invoice.getCustomer() != null ? invoice.getCustomer().getId() : null)
-                .customerName(invoice.getCustomer() != null ? invoice.getCustomer().getName() : null)
-                .customerPhone(invoice.getCustomer() != null ? invoice.getCustomer().getPhone() : null)
-                .totalAmount(invoice.getTotalAmount())
-                .discountAmount(invoice.getDiscountAmount())
-                .taxAmount(invoice.getTaxAmount())
-                .netAmount(invoice.getNetAmount())
-                .paidAmount(invoice.getPaidAmount())
-                .balanceAmount(invoice.getBalanceAmount())
+                .invoiceNo(invoice.getInvoiceNo() != null ? invoice.getInvoiceNo() : "Unknown")
+                .invoiceDate(invoice.getInvoiceDate() != null ? invoice.getInvoiceDate() : LocalDate.now())
+                .customerId(customerId)
+                .customerName(customerName)
+                .customerPhone(customerPhone)
+                .totalAmount(invoice.getTotalAmount() != null ? invoice.getTotalAmount() : BigDecimal.ZERO)
+                .discountAmount(invoice.getDiscountAmount() != null ? invoice.getDiscountAmount() : BigDecimal.ZERO)
+                .taxAmount(invoice.getTaxAmount() != null ? invoice.getTaxAmount() : BigDecimal.ZERO)
+                .netAmount(invoice.getNetAmount() != null ? invoice.getNetAmount() : BigDecimal.ZERO)
+                .paidAmount(invoice.getPaidAmount() != null ? invoice.getPaidAmount() : BigDecimal.ZERO)
+                .balanceAmount(invoice.getBalanceAmount() != null ? invoice.getBalanceAmount() : BigDecimal.ZERO)
                 .paymentType(invoice.getPaymentType() != null ? invoice.getPaymentType().toString() : null)
                 .paymentMode(invoice.getPaymentMode())
                 .referenceNo(invoice.getReferenceNo())
                 .notes(invoice.getNotes())
-                .isReturned(invoice.getIsReturned())
+                .isReturned(invoice.getIsReturned() != null ? invoice.getIsReturned() : false)
                 .createdBy(invoice.getCreatedBy() != null ? invoice.getCreatedBy().getUsername() : null)
-                .createdAt(invoice.getCreatedAt())
+                .createdAt(invoice.getCreatedAt() != null ? invoice.getCreatedAt() : LocalDateTime.now())
                 .items(itemResponses)
                 .build();
+                
         } catch (Exception e) {
             logger.error("❌ Error converting invoice to response: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to convert invoice data: " + e.getMessage());
