@@ -16,8 +16,19 @@ import {
   Alert,
   CircularProgress,
   Chip,
+  Stack,
 } from '@mui/material';
-import { Print, ArrowBack, Receipt, CheckCircle, Cancel } from '@mui/icons-material';
+import {
+  Print,
+  ArrowBack,
+  Receipt,
+  Business,
+  Phone,
+  Email,
+  LocationOn,
+  QrCode,
+  CheckCircle,
+} from '@mui/icons-material';
 import { salesService } from '../../services/salesService';
 
 const SalesPrint = () => {
@@ -28,11 +39,22 @@ const SalesPrint = () => {
   const [error, setError] = useState('');
   const [printTriggered, setPrintTriggered] = useState(false);
 
+  // Company Details
+  const company = {
+    name: 'Inventory Pro Solutions',
+    address: '123 Business District, MG Road, Mumbai - 400001',
+    phone: '+91 98765 43210',
+    email: 'info@inventorypro.com',
+    gst: 'GSTIN: 27AABCI1234D1ZP',
+    pan: 'PAN: AABCI1234D',
+    cin: 'CIN: U74999MH2020PTC123456',
+    website: 'www.inventorypro.com',
+  };
+
   useEffect(() => {
     if (id) {
       fetchInvoiceData(id);
     } else {
-      // Check if we have data from window (fallback for print from list)
       const printData = window.printSaleData;
       if (printData) {
         setInvoice(printData);
@@ -60,7 +82,6 @@ const SalesPrint = () => {
         return;
       }
 
-      console.log('📄 Fetching invoice with ID:', invoiceId);
       const response = await salesService.getInvoiceById(invoiceId);
       
       if (!response) {
@@ -72,7 +93,6 @@ const SalesPrint = () => {
       setInvoice(response);
       setLoading(false);
       
-      // Auto print after data loads (only once)
       if (!printTriggered) {
         setTimeout(() => {
           window.print();
@@ -80,11 +100,9 @@ const SalesPrint = () => {
         }, 800);
       }
     } catch (error) {
-      console.error('❌ Error fetching invoice:', error);
-      
-      // Handle 404 specifically
+      console.error('Error fetching invoice:', error);
       if (error.response?.status === 404) {
-        setError(`Invoice with ID ${invoiceId} not found. It may have been deleted.`);
+        setError(`Invoice with ID ${invoiceId} not found.`);
       } else if (error.response?.status === 500) {
         setError('Server error loading invoice. Please try again later.');
       } else {
@@ -102,10 +120,15 @@ const SalesPrint = () => {
     navigate('/sales/list');
   };
 
-  // Format currency
   const formatCurrency = (amount) => {
     if (!amount) return '₹0.00';
     return `₹${parseFloat(amount).toFixed(2)}`;
+  };
+
+  const numberToWords = (num) => {
+    if (!num) return 'Zero';
+    const words = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+    return words[num] || num.toString();
   };
 
   if (loading) {
@@ -120,23 +143,10 @@ const SalesPrint = () => {
   if (error) {
     return (
       <Box p={3} maxWidth="600px" mx="auto">
-        <Alert 
-          severity="error" 
-          sx={{ mb: 3 }}
-          action={
-            <Button color="inherit" size="small" onClick={handleBack}>
-              Go Back
-            </Button>
-          }
-        >
+        <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
-        <Button 
-          variant="contained" 
-          onClick={handleBack} 
-          startIcon={<ArrowBack />}
-          fullWidth
-        >
+        <Button variant="contained" onClick={handleBack} startIcon={<ArrowBack />} fullWidth>
           Return to Sales List
         </Button>
       </Box>
@@ -146,23 +156,10 @@ const SalesPrint = () => {
   if (!invoice) {
     return (
       <Box p={3} maxWidth="600px" mx="auto">
-        <Alert 
-          severity="warning" 
-          sx={{ mb: 3 }}
-          action={
-            <Button color="inherit" size="small" onClick={handleBack}>
-              Go Back
-            </Button>
-          }
-        >
+        <Alert severity="warning" sx={{ mb: 3 }}>
           No invoice data found
         </Alert>
-        <Button 
-          variant="contained" 
-          onClick={handleBack} 
-          startIcon={<ArrowBack />}
-          fullWidth
-        >
+        <Button variant="contained" onClick={handleBack} startIcon={<ArrowBack />} fullWidth>
           Return to Sales List
         </Button>
       </Box>
@@ -170,7 +167,7 @@ const SalesPrint = () => {
   }
 
   return (
-    <Box sx={{ bgcolor: '#f5f7fa', minHeight: '100vh' }}>
+    <Box sx={{ bgcolor: '#f0f2f5', minHeight: '100vh' }}>
       {/* Print Controls - Hidden when printing */}
       <Box 
         sx={{ 
@@ -188,11 +185,7 @@ const SalesPrint = () => {
           }
         }}
       >
-        <Button 
-          variant="outlined" 
-          startIcon={<ArrowBack />}
-          onClick={handleBack}
-        >
+        <Button variant="outlined" startIcon={<ArrowBack />} onClick={handleBack}>
           Back
         </Button>
         <Box display="flex" alignItems="center" gap={2}>
@@ -210,9 +203,9 @@ const SalesPrint = () => {
           startIcon={<Print />}
           onClick={handlePrint}
           sx={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            background: 'linear-gradient(135deg, #1a237e, #0d47a1)',
             '&:hover': {
-              background: 'linear-gradient(135deg, #5a67d8 0%, #6b46a1 100%)',
+              background: 'linear-gradient(135deg, #0d47a1, #1a237e)',
             }
           }}
         >
@@ -221,101 +214,186 @@ const SalesPrint = () => {
       </Box>
 
       {/* Invoice Content */}
-      <Box sx={{ p: 3, maxWidth: '1000px', margin: '0 auto' }} id="invoice-content">
-        <Paper sx={{ p: 4, borderRadius: 3, boxShadow: '0 2px 20px rgba(0,0,0,0.08)' }}>
-          {/* Header */}
-          <Box display="flex" justifyContent="space-between" alignItems="start" mb={3} flexWrap="wrap">
-            <Box mb={2}>
-              <Typography variant="h4" fontWeight="bold" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Receipt /> Inventory Pro
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                123 Business Street, City - 400001
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                GST: GST123456789 | Phone: +91 9876543210
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Email: info@inventorypro.com
-              </Typography>
-            </Box>
-            <Box textAlign="right">
-              <Typography variant="h5" fontWeight="bold" color="primary">
-                TAX INVOICE
-              </Typography>
-              <Typography variant="h6" fontWeight={500} sx={{ color: '#333' }}>
-                {invoice.invoiceNo}
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Date: {invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('en-IN', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                }) : 'N/A'}
-              </Typography>
-              <Chip 
-                label={invoice.paymentType || 'N/A'} 
-                size="small"
-                color={invoice.paymentType === 'CREDIT' ? 'warning' : 'success'}
-                sx={{ mt: 0.5 }}
-              />
-              {invoice.referenceNo && (
-                <Typography variant="body2" color="textSecondary">
-                  Ref: {invoice.referenceNo}
-                </Typography>
-              )}
-            </Box>
+      <Box sx={{ p: 3, maxWidth: '1100px', margin: '0 auto' }} id="invoice-content">
+        <Paper sx={{ 
+          p: 4, 
+          borderRadius: 2, 
+          boxShadow: '0 2px 30px rgba(0,0,0,0.08)',
+          '@media print': {
+            boxShadow: 'none',
+            p: 3,
+          }
+        }}>
+          {/* ===================== HEADER ===================== */}
+          <Box sx={{ 
+            borderBottom: '3px solid #1a237e',
+            pb: 2,
+            mb: 3,
+            '@media print': {
+              borderBottom: '3px solid #1a237e',
+            }
+          }}>
+            <Grid container alignItems="center" spacing={2}>
+              <Grid item xs={12} md={7}>
+                <Box display="flex" alignItems="center" gap={2}>
+                  <Box
+                    sx={{
+                      width: 50,
+                      height: 50,
+                      borderRadius: 1,
+                      bgcolor: '#1a237e',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Receipt sx={{ fontSize: 30, color: '#fff' }} />
+                  </Box>
+                  <Box>
+                    <Typography variant="h5" fontWeight="bold" color="#1a237e">
+                      {company.name}
+                    </Typography>
+                    <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                      <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5}>
+                        <LocationOn sx={{ fontSize: 14 }} /> {company.address}
+                      </Typography>
+                    </Box>
+                    <Box display="flex" alignItems="center" gap={2} flexWrap="wrap" mt={0.5}>
+                      <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5}>
+                        <Phone sx={{ fontSize: 12 }} /> {company.phone}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary" display="flex" alignItems="center" gap={0.5}>
+                        <Email sx={{ fontSize: 12 }} /> {company.email}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Box>
+              </Grid>
+              <Grid item xs={12} md={5}>
+                <Box textAlign="right">
+                  <Typography variant="h4" fontWeight="bold" color="#1a237e" sx={{ letterSpacing: 2 }}>
+                    TAX INVOICE
+                  </Typography>
+                  <Typography variant="subtitle1" fontWeight="bold" sx={{ color: '#333' }}>
+                    {invoice.invoiceNo}
+                  </Typography>
+                  <Box mt={0.5}>
+                    <Chip 
+                      label={invoice.paymentType || 'N/A'} 
+                      size="small"
+                      color={invoice.paymentType === 'CREDIT' ? 'warning' : 'success'}
+                      sx={{ fontWeight: 'bold' }}
+                    />
+                  </Box>
+                </Box>
+              </Grid>
+            </Grid>
           </Box>
 
-          <Divider sx={{ my: 2 }} />
-
-          {/* Customer Details */}
-          <Grid container spacing={3} mb={3}>
+          {/* ===================== BILL DETAILS ===================== */}
+          <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid item xs={12} md={6}>
-              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-                Bill To:
-              </Typography>
-              <Typography variant="h6" fontWeight={500}>
-                {invoice.customerName || 'Unknown Customer'}
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Phone: {invoice.customerPhone || 'N/A'}
-              </Typography>
-              {invoice.customerEmail && (
-                <Typography variant="body2" color="textSecondary">
-                  Email: {invoice.customerEmail}
+              <Box sx={{ 
+                p: 2, 
+                bgcolor: '#f8f9fa', 
+                borderRadius: 1,
+                borderLeft: '4px solid #1a237e',
+              }}>
+                <Typography variant="subtitle2" color="#1a237e" fontWeight="bold" gutterBottom>
+                  BILL TO:
                 </Typography>
-              )}
+                <Typography variant="h6" fontWeight="bold" sx={{ color: '#333' }}>
+                  {invoice.customerName || 'Unknown Customer'}
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Phone: {invoice.customerPhone || 'N/A'}
+                </Typography>
+                {invoice.customerEmail && (
+                  <Typography variant="body2" color="textSecondary">
+                    Email: {invoice.customerEmail}
+                  </Typography>
+                )}
+                {invoice.customerGst && (
+                  <Typography variant="body2" color="textSecondary">
+                    GSTIN: {invoice.customerGst}
+                  </Typography>
+                )}
+              </Box>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-                Invoice Details:
-              </Typography>
-              <Typography variant="body2">
-                <strong>Status:</strong> {invoice.isReturned ? 'Returned' : 'Active'}
-              </Typography>
-              <Typography variant="body2">
-                <strong>Payment Type:</strong> {invoice.paymentType || 'N/A'}
-              </Typography>
-              <Typography variant="body2">
-                <strong>Total Items:</strong> {invoice.items?.length || 0}
-              </Typography>
+              <Box sx={{ 
+                p: 2, 
+                bgcolor: '#f8f9fa', 
+                borderRadius: 1,
+                borderLeft: '4px solid #0d47a1',
+              }}>
+                <Typography variant="subtitle2" color="#0d47a1" fontWeight="bold" gutterBottom>
+                  INVOICE DETAILS:
+                </Typography>
+                <Grid container spacing={1}>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="textSecondary">Invoice Date</Typography>
+                    <Typography variant="body2" fontWeight="500">
+                      {invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('en-IN', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      }) : 'N/A'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="textSecondary">Due Date</Typography>
+                    <Typography variant="body2" fontWeight="500">
+                      {invoice.invoiceDate ? new Date(new Date(invoice.invoiceDate).setDate(new Date(invoice.invoiceDate).getDate() + 30)).toLocaleDateString('en-IN', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      }) : 'N/A'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="textSecondary">Payment Mode</Typography>
+                    <Typography variant="body2" fontWeight="500">{invoice.paymentType || 'N/A'}</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="textSecondary">Status</Typography>
+                    <Chip 
+                      label={invoice.isReturned ? 'Returned' : 'Active'} 
+                      size="small"
+                      color={invoice.isReturned ? 'error' : 'success'}
+                      sx={{ mt: 0.5 }}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
             </Grid>
           </Grid>
 
-          {/* Items Table */}
-          <TableContainer sx={{ borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          {/* ===================== ITEMS TABLE ===================== */}
+          <TableContainer sx={{ 
+            borderRadius: 1, 
+            border: '1px solid #e0e0e0',
+            mb: 3,
+            '@media print': {
+              border: '1px solid #333',
+            }
+          }}>
             <Table>
               <TableHead>
-                <TableRow sx={{ backgroundColor: '#f5f7fa' }}>
-                  <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }}>Item</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }}>Code</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>Qty</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>Rate (₹)</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>Disc %</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>Tax %</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount (₹)</TableCell>
+                <TableRow sx={{ 
+                  bgcolor: '#1a237e',
+                  '@media print': {
+                    bgcolor: '#1a237e !important',
+                  }
+                }}>
+                  <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>#</TableCell>
+                  <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Item Description</TableCell>
+                  <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>HSN/SAC</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold' }}>Qty</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold' }}>Rate (₹)</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold' }}>Disc %</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold' }}>Tax %</TableCell>
+                  <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold' }}>Amount (₹)</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -324,19 +402,22 @@ const SalesPrint = () => {
                     <TableRow key={item.id || index} hover>
                       <TableCell>{index + 1}</TableCell>
                       <TableCell>
-                        <Typography variant="body2" fontWeight={500}>
+                        <Typography variant="body2" fontWeight="500">
                           {item.itemName || 'Unknown Item'}
                         </Typography>
+                        {item.itemCode && (
+                          <Typography variant="caption" color="textSecondary">
+                            Code: {item.itemCode}
+                          </Typography>
+                        )}
                       </TableCell>
-                      <TableCell>{item.itemCode || '-'}</TableCell>
+                      <TableCell>{item.hsnCode || '-'}</TableCell>
                       <TableCell align="right">{parseFloat(item.quantity).toFixed(0)}</TableCell>
                       <TableCell align="right">{formatCurrency(item.unitPrice)}</TableCell>
                       <TableCell align="right">{item.discountPercent || 0}%</TableCell>
                       <TableCell align="right">{item.taxPercent || 0}%</TableCell>
-                      <TableCell align="right">
-                        <Typography fontWeight={500}>
-                          {formatCurrency(item.totalAmount)}
-                        </Typography>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                        {formatCurrency(item.totalAmount)}
                       </TableCell>
                     </TableRow>
                   ))
@@ -351,75 +432,139 @@ const SalesPrint = () => {
             </Table>
           </TableContainer>
 
-          <Divider sx={{ my: 2 }} />
+          {/* ===================== SUMMARY ===================== */}
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={7}>
+              <Box sx={{ 
+                p: 2, 
+                bgcolor: '#f8f9fa', 
+                borderRadius: 1,
+                border: '1px solid #e0e0e0',
+              }}>
+                <Typography variant="subtitle2" color="#1a237e" fontWeight="bold" gutterBottom>
+                  Amount in Words:
+                </Typography>
+                <Typography variant="body2" fontWeight="500" sx={{ textTransform: 'capitalize' }}>
+                  {invoice.netAmount ? `${numberToWords(Math.floor(invoice.netAmount))} Rupees Only` : 'Zero Rupees Only'}
+                </Typography>
+                <Divider sx={{ my: 1 }} />
+                <Box display="flex" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" color="textSecondary">
+                    Terms & Conditions:
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    1. Goods once sold cannot be returned
+                  </Typography>
+                </Box>
+                <Typography variant="caption" color="textSecondary" display="block">
+                  2. Payment due within 30 days
+                </Typography>
+                {invoice.notes && (
+                  <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1, fontStyle: 'italic' }}>
+                    Note: {invoice.notes}
+                  </Typography>
+                )}
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={5}>
+              <Box sx={{ 
+                p: 2, 
+                bgcolor: '#f8f9fa', 
+                borderRadius: 1,
+                border: '1px solid #e0e0e0',
+              }}>
+                <Typography variant="subtitle2" color="#1a237e" fontWeight="bold" gutterBottom>
+                  Payment Summary:
+                </Typography>
+                <Box display="flex" justifyContent="space-between" py={0.5}>
+                  <Typography color="textSecondary">Subtotal</Typography>
+                  <Typography>{formatCurrency(invoice.totalAmount)}</Typography>
+                </Box>
+                <Box display="flex" justifyContent="space-between" py={0.5}>
+                  <Typography color="textSecondary">Discount</Typography>
+                  <Typography color="success.main">-{formatCurrency(invoice.discountAmount)}</Typography>
+                </Box>
+                <Box display="flex" justifyContent="space-between" py={0.5}>
+                  <Typography color="textSecondary">Tax (GST)</Typography>
+                  <Typography>+{formatCurrency(invoice.taxAmount)}</Typography>
+                </Box>
+                <Divider sx={{ my: 1 }} />
+                <Box display="flex" justifyContent="space-between" py={0.5}>
+                  <Typography variant="h6" fontWeight="bold">Total</Typography>
+                  <Typography variant="h6" fontWeight="bold" color="#1a237e">
+                    {formatCurrency(invoice.netAmount)}
+                  </Typography>
+                </Box>
+                <Divider sx={{ my: 1 }} />
+                <Box display="flex" justifyContent="space-between" py={0.5}>
+                  <Typography color="textSecondary">Paid</Typography>
+                  <Typography>{formatCurrency(invoice.paidAmount)}</Typography>
+                </Box>
+                <Box display="flex" justifyContent="space-between" py={0.5}>
+                  <Typography color="textSecondary">Balance</Typography>
+                  <Typography 
+                    fontWeight="bold" 
+                    color={invoice.balanceAmount > 0 ? '#ed6c02' : '#2e7d32'}
+                  >
+                    {formatCurrency(invoice.balanceAmount)}
+                  </Typography>
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
 
-          {/* Summary */}
-          <Box display="flex" justifyContent="flex-end">
-            <Box sx={{ width: { xs: '100%', sm: 350 } }}>
-              <Box display="flex" justifyContent="space-between" py={0.5}>
-                <Typography color="textSecondary">Subtotal</Typography>
-                <Typography>{formatCurrency(invoice.totalAmount)}</Typography>
-              </Box>
-              <Box display="flex" justifyContent="space-between" py={0.5}>
-                <Typography color="textSecondary">Discount</Typography>
-                <Typography color="success.main">
-                  -{formatCurrency(invoice.discountAmount)}
+          {/* ===================== FOOTER ===================== */}
+          <Box sx={{ 
+            mt: 4, 
+            pt: 3, 
+            borderTop: '2px solid #1a237e',
+            '@media print': {
+              borderTop: '2px solid #1a237e',
+            }
+          }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={4}>
+                <Typography variant="caption" color="textSecondary" display="block">
+                  <strong>Company:</strong> {company.name}
                 </Typography>
-              </Box>
-              <Box display="flex" justifyContent="space-between" py={0.5}>
-                <Typography color="textSecondary">Tax</Typography>
-                <Typography>+{formatCurrency(invoice.taxAmount)}</Typography>
-              </Box>
-              <Divider sx={{ my: 1 }} />
-              <Box display="flex" justifyContent="space-between" py={0.5}>
-                <Typography variant="h6">Total</Typography>
-                <Typography variant="h6" color="primary">
-                  {formatCurrency(invoice.netAmount)}
+                <Typography variant="caption" color="textSecondary" display="block">
+                  {company.gst}
                 </Typography>
-              </Box>
-              <Box display="flex" justifyContent="space-between" py={0.5}>
-                <Typography color="textSecondary">Paid</Typography>
-                <Typography>{formatCurrency(invoice.paidAmount)}</Typography>
-              </Box>
-              <Box display="flex" justifyContent="space-between" py={0.5}>
-                <Typography color="textSecondary">Balance</Typography>
-                <Typography 
-                  fontWeight={500} 
-                  color={invoice.balanceAmount > 0 ? '#ed6c02' : '#2e7d32'}
-                >
-                  {formatCurrency(invoice.balanceAmount)}
+                <Typography variant="caption" color="textSecondary" display="block">
+                  {company.pan}
                 </Typography>
-              </Box>
-            </Box>
-          </Box>
-
-          {invoice.notes && (
-            <Box mt={3}>
-              <Typography variant="subtitle2" color="textSecondary">
-                Notes:
+              </Grid>
+              <Grid item xs={12} md={4} textAlign="center">
+                <Box display="flex" flexDirection="column" alignItems="center">
+                  <QrCode sx={{ fontSize: 60, color: '#333' }} />
+                  <Typography variant="caption" color="textSecondary">
+                    Scan to Verify
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1 }}>
+                    This is a computer-generated invoice
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} md={4} textAlign="right">
+                <Typography variant="caption" color="textSecondary" display="block">
+                  <strong>Contact:</strong> {company.phone}
+                </Typography>
+                <Typography variant="caption" color="textSecondary" display="block">
+                  {company.email}
+                </Typography>
+                <Typography variant="caption" color="textSecondary" display="block">
+                  {company.website}
+                </Typography>
+                <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1, fontSize: '0.6rem' }}>
+                  Generated: {new Date().toLocaleString()}
+                </Typography>
+              </Grid>
+            </Grid>
+            <Box textAlign="center" sx={{ mt: 2 }}>
+              <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.6rem' }}>
+                &copy; {new Date().getFullYear()} {company.name}. All rights reserved.
               </Typography>
-              <Typography variant="body2" sx={{ p: 2, bgcolor: '#f8f9fa', borderRadius: 1 }}>
-                {invoice.notes}
-              </Typography>
             </Box>
-          )}
-
-          <Divider sx={{ my: 3 }} />
-
-          {/* Footer */}
-          <Box textAlign="center">
-            <Typography variant="caption" color="textSecondary" display="block">
-              Thank you for your business!
-            </Typography>
-            <Typography variant="caption" color="textSecondary" display="block" sx={{ fontSize: '0.65rem' }}>
-              This is a computer-generated invoice. No signature required.
-            </Typography>
-            <Typography variant="caption" color="textSecondary" display="block" sx={{ fontSize: '0.65rem' }}>
-              For queries, contact support@inventorypro.com
-            </Typography>
-            <Typography variant="caption" color="textSecondary" display="block" sx={{ fontSize: '0.6rem', mt: 1 }}>
-              Generated on: {new Date().toLocaleString()}
-            </Typography>
           </Box>
         </Paper>
       </Box>
