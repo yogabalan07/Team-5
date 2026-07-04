@@ -20,11 +20,9 @@ export const purchaseService = {
     /**
      * Get purchase order by ID
      * GET /api/purchase-orders/{id}
-     * FIXES THE 404 ERROR
      */
     getOrderById: async (id) => {
         try {
-            // Changed from /purchases/order/${id} to /purchase-orders/${id}
             const response = await api.get(`/purchase-orders/${id}`);
             return response.data;
         } catch (error) {
@@ -39,7 +37,6 @@ export const purchaseService = {
      */
     getOrderByPoNumber: async (poNumber) => {
         try {
-            // Changed from /purchases/order/${poNumber} to /purchase-orders/number/${poNumber}
             const response = await api.get(`/purchase-orders/number/${poNumber}`);
             return response.data;
         } catch (error) {
@@ -459,15 +456,8 @@ export const purchaseService = {
         }
     },
 
-    // ==================== LEGACY SUPPORT (Optional - Remove After Testing) ====================
-    
-    /**
-     * @deprecated Use getOrderById instead
-     */
-    getOrderByPoNumber: async (poNumber) => {
-        console.warn('getOrderByPoNumber is deprecated, use getOrderByPoNumber instead');
-        return purchaseService.getOrderByPoNumber(poNumber);
-    },
+    // ✅ FIXED: Remove the recursive deprecated method
+    // The getOrderByPoNumber method above is already correct
 };
 
 export default purchaseService;
