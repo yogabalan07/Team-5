@@ -11,7 +11,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000,
+  timeout: 60000, // ✅ Increased from 30000 to 60000 (60 seconds)
 });
 
 // Request interceptor to add token
@@ -26,6 +26,7 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    console.error('❌ Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
@@ -36,13 +37,43 @@ api.interceptors.response.use(
     console.log(`📥 ${response.status} ${response.config.url}`);
     return response;
   },
-  (error) => {
+  async (error) => {
+    const { config } = error;
+    
+    // ✅ Handle timeout errors with retry logic
+    if (error.code === 'ECONNABORTED' && config && !config._retry) {
+      config._retry = true;
+      console.log(`🔄 Request timeout, retrying ${config.url} (attempt 1/2)...`);
+      try {
+        // Wait 2 seconds before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return await api.request(config);
+      } catch (retryError) {
+        console.error(`❌ Retry failed for ${config.url}`);
+        return Promise.reject(retryError);
+      }
+    }
+    
+    // ✅ Handle authentication errors
     if (error.response?.status === 401 || error.response?.status === 403) {
       console.error('🔒 Authentication error:', error.response.status);
+      console.error('📝 Error details:', error.response.data);
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
     }
+    
+    // ✅ Handle server errors
+    if (error.response?.status === 500) {
+      console.error('❌ Server error:', error.response.status);
+      console.error('📝 Error details:', error.response.data);
+    }
+    
+    // ✅ Handle network errors
+    if (error.code === 'ERR_NETWORK') {
+      console.error('🌐 Network error - Check if backend is running');
+    }
+    
     return Promise.reject(error);
   }
 );
