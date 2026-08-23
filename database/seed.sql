@@ -1,0 +1,44 @@
+-- ============================================================
+-- INVENTORY MANAGEMENT SYSTEM - SEED DATA
+-- Target: PostgreSQL (Neon)
+-- Created: 2026-08-23
+-- ============================================================
+-- Run AFTER schema.sql and indexes.sql
+--
+-- NOTE: Users (admin, manager, testuser) are auto-created by
+-- the Spring Boot application on startup via @PostConstruct.
+-- No user seed data is needed here.
+-- ============================================================
+
+-- ============================================================
+-- SAMPLE ITEMS (optional - for initial testing)
+-- ============================================================
+-- Uncomment below to insert sample items.
+-- The application can also create items via the UI.
+
+-- INSERT INTO items (item_code, item_name, category, unit, price, stock_qty, reorder_level, status, created_at, updated_at)
+-- VALUES
+--     ('ITM-001', 'Laptop Computer', 'Electronics', 'Piece', 45000.00, 50, 10, 'In Stock', NOW(), NOW()),
+--     ('ITM-002', 'Wireless Mouse', 'Electronics', 'Piece', 500.00, 200, 20, 'In Stock', NOW(), NOW()),
+--     ('ITM-003', 'A4 Paper Ream', 'Stationery', 'Box', 250.00, 100, 15, 'In Stock', NOW(), NOW()),
+--     ('ITM-004', 'Ballpoint Pen Pack', 'Stationery', 'Pack', 80.00, 300, 30, 'In Stock', NOW(), NOW()),
+--     ('ITM-005', 'Office Chair', 'Furniture', 'Piece', 8500.00, 25, 5, 'In Stock', NOW(), NOW())
+-- ON CONFLICT (item_code) DO NOTHING;
+
+-- ============================================================
+-- SAMPLE CUSTOMERS (optional - for initial testing)
+-- ============================================================
+-- INSERT INTO customers (customer_id, customer_name, phone, email, address, status, created_at, updated_at)
+-- VALUES
+--     ('CUS-001', 'John Enterprises', '9876543210', 'john@example.com', '123 Main St, Chennai', 'Active', NOW(), NOW()),
+--     ('CUS-002', 'Priya Traders', '9876543211', 'priya@example.com', '456 Park Rd, Mumbai', 'Active', NOW(), NOW())
+-- ON CONFLICT (customer_id) DO NOTHING;
+
+-- ============================================================
+-- SAMPLE SUPPLIERS (optional - for initial testing)
+-- ============================================================
+-- INSERT INTO suppliers (supplier_id, supplier_name, contact_person, phone, email, address, status, created_at, updated_at)
+-- VALUES
+--     ('SUP-001', 'TechSource India', 'Ravi Kumar', '9876543220', 'ravi@techsource.in', '789 Tech Park, Bangalore', 'Active', NOW(), NOW()),
+--     ('SUP-002', 'Global Supplies', 'Meena Devi', '9876543221', 'meena@globalsupplies.in', '321 Industrial Area, Delhi', 'Active', NOW(), NOW())
+-- ON CONFLICT (supplier_id) DO NOTHING;
