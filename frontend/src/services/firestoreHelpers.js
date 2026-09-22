@@ -19,7 +19,7 @@ import {
   limit,
   runTransaction,
   serverTimestamp,
-} from 'firebase/firestore';
+} from '@firebase/firestore';
 import { getCurrentUser } from './authService';
 import { db } from '../firebase/firebase';
 import { firebaseSetupMessage } from '../firebase/config';

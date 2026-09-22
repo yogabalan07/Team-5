@@ -2,7 +2,7 @@
 // Firestore-backed sales invoices. Invoice creation/update/delete and the
 // resulting stock movements all run inside one transaction each.
 
-import { getDocs, doc, query, where, limit } from 'firebase/firestore';
+import { getDocs, doc, query, where, limit } from '@firebase/firestore';
 import {
   col,
   docOf,

@@ -5,7 +5,7 @@
 // (Excel) and the same CSV is used for "PDF" so the UI keeps working without a
 // backend. Keep the exact method names the report components call.
 
-import { getDocs as _getDocs } from 'firebase/firestore';
+import { getDocs as _getDocs } from '@firebase/firestore';
 import {
   col,
   serviceError,

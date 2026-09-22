@@ -2,7 +2,7 @@
 // Firestore-backed purchase orders + purchase invoices. Invoices touch stock
 // (add) inside a transaction; orders only reserve details (no stock change).
 
-import { getDocs, doc, query, where, limit } from 'firebase/firestore';
+import { getDocs, doc, query, where, limit } from '@firebase/firestore';
 import {
   col,
   docOf,
@@ -379,7 +379,7 @@ export const purchaseService = {
 };
 
 async function setOrderDoc(id, payload) {
-  const { setDoc, updateDoc } = await import('firebase/firestore');
+  const { setDoc, updateDoc } = await import('@firebase/firestore');
   if (payload.items || payload.poNumber) {
     await setDoc(docOf(ORDERS, id), payload, { merge: true });
   } else {
@@ -416,7 +416,7 @@ function pagedFromItems(items, page, size) {
 }
 
 async function deleteOrderDoc(id) {
-  const { deleteDoc } = await import('firebase/firestore');
+  const { deleteDoc } = await import('@firebase/firestore');
   await deleteDoc(docOf(ORDERS, id));
 }
 

@@ -13,7 +13,7 @@ import {
   nowISO,
 } from './businessLogic';
 import { getCurrentUser } from './authService';
-import { runTransaction } from 'firebase/firestore';
+import { runTransaction } from '@firebase/firestore';
 import { db } from '../firebase/firebase';
 import { COLLECTIONS, docOf, autoDoc } from './firestoreHelpers';
 import { firebaseSetupMessage } from '../firebase/config';

@@ -23,7 +23,6 @@ frontend/              React application (CRA)
 functions/             Cloud Functions (privileged user operations, npm)
 firebase.json          Firebase config (rules + hosting + functions)
 firestore.rules        Firestore security rules
-storage.rules          Storage security rules
 .branches/.firebaserc  Firebase project binding
 ```
 

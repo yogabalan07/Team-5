@@ -15,9 +15,9 @@ import {
   getIdToken,
   getIdTokenResult,
   onAuthStateChanged,
-} from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+} from '@firebase/auth';
+import { doc, getDoc } from '@firebase/firestore';
+import { getFunctions, httpsCallable } from '@firebase/functions';
 import { auth, db } from '../firebase/firebase';
 import { isFirebaseConfigured, firebaseSetupMessage } from '../firebase/config';
 import { ROLES } from './businessLogic';

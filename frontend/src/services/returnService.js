@@ -3,7 +3,7 @@
 // (sales return -> stock comes back; purchase return -> stock goes out) inside
 // a single transaction each.
 
-import { getDocs, doc, query, where, limit } from 'firebase/firestore';
+import { getDocs, doc, query, where, limit } from '@firebase/firestore';
 import {
   col,
   docOf,

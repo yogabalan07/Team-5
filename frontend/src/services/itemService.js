@@ -2,7 +2,7 @@
 // Firestore-backed item master. Denormalised master names are written on the
 // item so grids and invoices never need joins.
 
-import { getDocs, addDoc, setDoc, deleteDoc, orderBy, limit, query, where } from 'firebase/firestore';
+import { getDocs, addDoc, setDoc, deleteDoc, orderBy, limit, query, where } from '@firebase/firestore';
 import {
   col,
   docOf,

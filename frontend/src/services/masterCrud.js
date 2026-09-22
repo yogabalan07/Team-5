@@ -3,7 +3,7 @@
 // taxes). All reads are available to any signed-in user; writes follow the
 // legacy role rules enforced again in Firestore security rules.
 
-import { getDocs, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import { getDocs, doc, setDoc, deleteDoc, addDoc } from '@firebase/firestore';
 import {
   col,
   getByIdOr404,

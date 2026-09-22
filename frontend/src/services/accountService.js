@@ -3,7 +3,7 @@
 // payments against supplier dues. Receipts/payments adjust both the invoice
 // balance and the party credit balance atomically.
 
-import { getDocs, doc, query, where, limit } from 'firebase/firestore';
+import { getDocs, doc, query, where, limit } from '@firebase/firestore';
 import {
   col,
   docOf,

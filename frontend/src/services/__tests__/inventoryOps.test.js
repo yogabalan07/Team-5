@@ -1,7 +1,7 @@
 import { applyStockLine, TYPE_SALES, TYPE_PURCHASE, TYPE_SALES_RETURN } from '../inventoryOps';
 
-jest.mock('firebase/firestore', () => {
-  const actual = jest.requireActual('firebase/firestore');
+jest.mock('@firebase/firestore', () => {
+  const actual = jest.requireActual('@firebase/firestore');
   return {
     ...actual,
     collection: jest.fn((db, name) => ({ __mockRef: true, db, name })),
@@ -35,7 +35,7 @@ jest.mock('../../firebase/config', () => ({
   firebaseSetupMessage: () => 'Firebase not configured in tests',
 }));
 
-const mockFirestore = require('firebase/firestore');
+const mockFirestore = require('@firebase/firestore');
 
 function makeTx(itemSnap) {
   return {

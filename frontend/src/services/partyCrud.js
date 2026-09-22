@@ -1,7 +1,7 @@
 // src/services/partyCrud.js
 // Shared implementation for customer & supplier services on Firestore.
 
-import { getDocs, addDoc, setDoc, deleteDoc, query, where, orderBy, limit } from 'firebase/firestore';
+import { getDocs, addDoc, setDoc, deleteDoc, query, where, orderBy, limit } from '@firebase/firestore';
 import {
   col,
   docOf,

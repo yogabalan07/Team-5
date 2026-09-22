@@ -10,13 +10,12 @@ removed in the migration; nothing else needs to be hosted.
 2. Name it (example: `inventory-pro-2024`) and create it.
 3. From the project dashboard, open **Project settings → General**.
 4. Under **Your apps**, click the web icon (`</>`) and register a web app.
-5. Copy the six config values:
+5. Copy the config values:
 
    ```
    REACT_APP_FIREBASE_API_KEY
    REACT_APP_FIREBASE_AUTH_DOMAIN
    REACT_APP_FIREBASE_PROJECT_ID
-   REACT_APP_FIREBASE_STORAGE_BUCKET
    REACT_APP_FIREBASE_MESSAGING_SENDER_ID
    REACT_APP_FIREBASE_APP_ID
    ```
@@ -27,7 +26,7 @@ removed in the migration; nothing else needs to be hosted.
 cp frontend/.env.example frontend/.env
 ```
 
-Paste the six values into `frontend/.env`. `frontend/.env` is git-ignored; the
+Paste the values into `frontend/.env`. `frontend/.env` is git-ignored; the
 example file contains placeholders only. These values are not secrets — they
 are public identifiers that ship in the browser build — but keep real
 credentials out of the repository regardless.
@@ -65,8 +64,8 @@ npm run build --prefix frontend
 npx firebase deploy
 ```
 
-This pushes `firestore.rules`, `firestore.indexes.json`, `storage.rules`, the
-Cloud Functions in `functions/`, and the built frontend from `frontend/build`.
+This pushes `firestore.rules`, `firestore.indexes.json`, the Cloud Functions in
+`functions/`, and the built frontend from `frontend/build`.
 
 To push only one target: `npx firebase deploy --only firestore`, `--only
 functions`, or `--only hosting`.

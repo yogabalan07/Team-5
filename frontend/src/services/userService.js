@@ -3,8 +3,8 @@
 // Cloud Functions (never direct Firestore writes), which mirror the legacy
 // admin-only endpoints. Profile reads come from the users collection.
 
-import { getDocs } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getDocs } from '@firebase/firestore';
+import { getFunctions, httpsCallable } from '@firebase/functions';
 import {
   col,
   getByIdOr404,
