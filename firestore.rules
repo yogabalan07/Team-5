@@ -25,6 +25,15 @@ service cloud.firestore {
       return isEnabled() && request.auth.token.role in roles;
     }
 
+    // True when an update touches ONLY the listed fields. Used to let the
+    // transactional service flows (sales/billing-clerk, purchase-manager,
+    // accounts) adjust derived counters (stock levels, invoice balances, party
+    // credit balances) without granting those roles full write access to the
+    // master records.
+    function changesOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
     // ------------------------------------------------------------------
     // users — created/managed ONLY by Cloud Functions. Reads: own profile
     // or admin. Client-side writes are disabled.
@@ -47,13 +56,15 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     match /customers/{docId} {
       allow read: if isEnabled();
-      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']) ||
+        (hasAny(['ACCOUNTS']) && changesOnly(['creditBalance']));
       allow delete: if isAdmin();
     }
 
     match /suppliers/{docId} {
       allow read: if isEnabled();
-      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']) ||
+        (hasAny(['ACCOUNTS']) && changesOnly(['creditBalance']));
       allow delete: if isAdmin();
     }
 
@@ -84,7 +95,13 @@ service cloud.firestore {
 
     match /items/{docId} {
       allow read: if isEnabled();
-      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      allow create: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      // Full item edits stay with admins/store managers; billing clerks and
+      // purchase managers may only move stock counters inside the atomic
+      // invoice transactions (currentStock + derived flags).
+      allow update: if hasAny(['ADMIN', 'STORE_MANAGER']) ||
+        (hasAny(['BILLING_CLERK', 'PURCHASE_MANAGER']) &&
+          changesOnly(['currentStock', 'isLowStock', 'isOutOfStock', 'updatedAt']));
       allow delete: if isAdmin();
     }
 
@@ -93,12 +110,16 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     match /purchaseOrders/{docId} {
       allow read: if isEnabled();
-      allow create, update, delete: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow delete: if isAdmin();
     }
 
     match /purchaseInvoices/{docId} {
       allow read: if isEnabled();
-      allow create, update, delete: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow create: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']) ||
+        (hasAny(['ACCOUNTS']) && changesOnly(['balanceAmount', 'paymentStatus']));
+      allow delete: if isAdmin();
     }
 
     // ------------------------------------------------------------------
@@ -106,17 +127,22 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     match /salesInvoices/{docId} {
       allow read: if isEnabled();
-      allow create, update, delete: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow create: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow update: if hasAny(['ADMIN', 'BILLING_CLERK']) ||
+        (hasAny(['ACCOUNTS']) && changesOnly(['balanceAmount', 'paymentStatus']));
+      allow delete: if isAdmin();
     }
 
     match /salesReturns/{docId} {
       allow read: if isEnabled();
-      allow create, update, delete: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow delete: if isAdmin();
     }
 
     match /purchaseReturns/{docId} {
       allow read: if isEnabled();
-      allow create, update, delete: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow delete: if isAdmin();
     }
 
     // ------------------------------------------------------------------

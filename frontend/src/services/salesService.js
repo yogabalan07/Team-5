@@ -11,7 +11,6 @@ import {
   serviceError,
   requireAuth,
   fromQuery,
-  fromSnap,
 } from './firestoreHelpers';
 import {
   invoiceTotals,

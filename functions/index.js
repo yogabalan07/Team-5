@@ -62,15 +62,18 @@ async function setClaims(uid, { role, disabled }) {
 }
 
 async function writeProfile(uid, profile) {
+  const username = profile.username || '';
+  const fullName = profile.fullName || '';
   await db.collection('users').doc(uid).set({
     uid,
-    username: profile.username || '',
-    usernameLower: String(profile.username || '').trim().toLowerCase(),
+    username,
+    usernameLower: String(username).trim().toLowerCase(),
     email: String(profile.email || '').toLowerCase(),
-    fullName: profile.fullName || '',
+    fullName,
     phone: profile.phone || '',
     role: profile.role || ROLES.STAFF,
     isActive: profile.isActive !== false,
+    searchText: `${username} ${fullName} ${profile.email || ''}`.trim().toLowerCase(),
     createdAt: profile.createdAt || admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
@@ -202,6 +205,7 @@ exports.adminUpdateUser = functions.https.onCall(async (data, context) => {
   if (data.phone !== undefined) update.phone = data.phone;
   if (data.email !== undefined) update.email = String(data.email).trim().toLowerCase();
   if (data.isActive !== undefined) update.isActive = Boolean(data.isActive);
+  update.searchText = `${update.username || doc.data().username} ${update.fullName !== undefined ? update.fullName : doc.data().fullName || ''} ${update.email !== undefined ? update.email : doc.data().email || ''}`.trim().toLowerCase();
   const roleChanged = data.role && VALID_ROLES.includes(data.role) && data.role !== doc.data().role;
   if (roleChanged) update.role = data.role;
   update.updatedAt = admin.firestore.FieldValue.serverTimestamp();

@@ -18,7 +18,6 @@ import {
   buildSearchText,
   nowISO,
   todayISO,
-  sortByCreatedDesc,
 } from './businessLogic';
 import { getCurrentUser } from './authService';
 import {

@@ -5,10 +5,9 @@
 // (Excel) and the same CSV is used for "PDF" so the UI keeps working without a
 // backend. Keep the exact method names the report components call.
 
-import { getDocs } from 'firebase/firestore';
+import { getDocs as _getDocs } from 'firebase/firestore';
 import {
   col,
-  getDocs as _getDocs,
   serviceError,
   requireAuth,
 } from './firestoreHelpers';
@@ -38,7 +37,9 @@ function filterIds(value, allowed) {
 }
 
 async function fetchAll(collectionName) {
-  return ensureDb(), _getDocs(col(collectionName)).then((snap) => snap.docs.map((d) => ({ ...d.data(), id: d.id })));
+  ensureDb();
+  const snap = await _getDocs(col(collectionName));
+  return snap.docs.map((d) => ({ ...d.data(), id: d.id }));
 }
 
 async function itemMasterMap(itemIds, brandIds, groupIds) {

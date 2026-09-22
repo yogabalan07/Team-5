@@ -26,7 +26,6 @@ import { firebaseSetupMessage } from '../firebase/config';
 import {
   pageResponse,
   slicePage,
-  sortByCreatedDesc,
   searchRange,
   todayKey,
   formatBusinessNumber,
@@ -70,6 +69,12 @@ export function col(name) {
 
 export function docOf(name, id) {
   return doc(getDb(), name, String(id));
+}
+
+// Creates a document reference with a freshly-generated ID, e.g. for atomic
+// writes inside a transaction (used for the stock journal).
+export function autoDoc(name) {
+  return doc(col(name));
 }
 
 export function serviceError(message, status = 400) {

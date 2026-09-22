@@ -15,7 +15,7 @@ import {
 import { getCurrentUser } from './authService';
 import { runTransaction } from 'firebase/firestore';
 import { db } from '../firebase/firebase';
-import { COLLECTIONS, docOf } from './firestoreHelpers';
+import { COLLECTIONS, docOf, autoDoc } from './firestoreHelpers';
 import { firebaseSetupMessage } from '../firebase/config';
 
 export const TYPE_SALES = 'SALES';
@@ -23,6 +23,17 @@ export const TYPE_PURCHASE = 'PURCHASE';
 export const TYPE_SALES_RETURN = 'SALES_RETURN';
 export const TYPE_PURCHASE_RETURN = 'PURCHASE_RETURN';
 export const TYPE_ADJUSTMENT = 'ADJUSTMENT';
+
+// Maps the service-level transaction types onto the ledger semantics used by
+// businessLogic.applyStock:
+//   SALES / PURCHASE_RETURN reduce stock, PURCHASE / SALES_RETURN increase it.
+const TYPE_TO_STOCK_MOVE = {
+  [TYPE_SALES]: 'SALES',
+  [TYPE_PURCHASE]: 'PURCHASE',
+  [TYPE_SALES_RETURN]: 'RETURN_IN',
+  [TYPE_PURCHASE_RETURN]: 'RETURN_OUT',
+  [TYPE_ADJUSTMENT]: 'ADJUSTMENT',
+};
 
 function actorName() {
   const user = getCurrentUser();
@@ -68,6 +79,12 @@ export async function applyStockLine(tx, {
 }) {
   const quantity = Number(qty) || 0;
   if (!itemId || quantity <= 0) return { itemId, quantity: 0 };
+
+  const stockMove = TYPE_TO_STOCK_MOVE[type];
+  if (!stockMove) {
+    throw new Error(`Unknown stock transaction type: ${type}`);
+  }
+
   const itemRef = docOf(COLLECTIONS.ITEMS, String(itemId));
   const itemSnap = await tx.get(itemRef);
   if (!itemSnap.exists()) {
@@ -76,22 +93,29 @@ export async function applyStockLine(tx, {
   const item = itemSnap.data();
   const current = Number(item.currentStock) || 0;
   const minStock = Number(item.minStock) || 0;
-  const delta = sign * quantity;
-  const next = applyStock(current, delta, minStock);
-  const stockInfo = classifyStock(next.currentStock, next.minStock);
-  if (next.insufficient) {
-    const err = new Error(`Insufficient stock for ${item.name || itemName || 'Item'} (available: ${current}, required: ${quantity})`);
-    err.code = 'INSUFFICIENT_STOCK';
-    throw err;
+  const maxStock = Number(item.maxStockLevel) || Number(item.maxStock) || 0;
+
+  let move;
+  try {
+    move = applyStock(current, stockMove, quantity);
+  } catch (e) {
+    if (e && e.code === 'INSUFFICIENT_STOCK') {
+      const err = new Error(`Insufficient stock for ${item.name || itemName || 'Item'} (available: ${current}, required: ${quantity})`);
+      err.code = 'INSUFFICIENT_STOCK';
+      throw err;
+    }
+    throw e;
   }
+
+  const status = classifyStock(move.newStock, minStock, maxStock);
   tx.update(itemRef, {
-    currentStock: next.currentStock,
-    isLowStock: stockInfo.isLowStock,
-    isOutOfStock: stockInfo.isOutOfStock,
+    currentStock: move.newStock,
+    isLowStock: status === 'LOW' || status === 'CRITICAL' || status === 'OUT_OF_STOCK',
+    isOutOfStock: status === 'OUT_OF_STOCK',
     updatedAt: nowISO(),
   });
 
-  const journalRef = docOf(COLLECTIONS.STOCK_TRANSACTIONS);
+  const journalRef = autoDoc(COLLECTIONS.STOCK_TRANSACTIONS);
   tx.set(journalRef, {
     type,
     sign,
@@ -100,7 +124,7 @@ export async function applyStockLine(tx, {
     itemName: item.name || itemName,
     itemCode: item.itemCode || itemCode,
     stockBefore: current,
-    stockAfter: next.currentStock,
+    stockAfter: move.newStock,
     referenceNumber,
     referenceId: referenceId || '',
     transactionDate: nowISO(),
@@ -108,7 +132,7 @@ export async function applyStockLine(tx, {
     createdAt: nowISO(),
     createdBy: actorName(),
   });
-  return { itemId: String(itemId), stockBefore: current, stockAfter: next.currentStock, quantity };
+  return { itemId: String(itemId), stockBefore: current, stockAfter: move.newStock, quantity };
 }
 
 export function assertStockAvailable(current, quantity, label) {

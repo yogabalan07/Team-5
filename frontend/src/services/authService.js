@@ -16,7 +16,7 @@ import {
   getIdTokenResult,
   onAuthStateChanged,
 } from 'firebase/auth';
-import { collection, doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from '../firebase/firebase';
 import { isFirebaseConfigured, firebaseSetupMessage } from '../firebase/config';
@@ -115,15 +115,27 @@ export async function login(email, password) {
 
   let role = ROLES.STAFF;
   let profile = null;
+  let disabledClaim = false;
   try {
     const tokenResult = await getIdTokenResult(firebaseUser, true);
     if (tokenResult.claims && tokenResult.claims.role) {
       role = tokenResult.claims.role;
     }
+    if (tokenResult.claims && tokenResult.claims.disabled === true) {
+      disabledClaim = true;
+    }
     profile = await loadProfile(firebaseUser.uid);
   } catch (e) {
     // Profile/claims may be briefly unavailable right after bootstrap; fall back.
     profile = null;
+  }
+
+  if (disabledClaim || (profile && profile.isActive === false)) {
+    try { await signOut(auth); } catch (e) { /* ignore */ }
+    const err = new Error('Your account is inactive. Contact an administrator.');
+    err.code = 'auth/user-disabled';
+    err.response = { status: 403, data: { error: err.message, message: err.message, status: 403 } };
+    throw err;
   }
 
   const userData = buildUserObject({
@@ -255,7 +267,7 @@ export async function refreshUserProfile() {
     fullName: profile.fullName || current.fullName,
     phone: profile.phone || current.phone,
     email: profile.email || current.email,
-    role: profile.role || current.role && current.role.replace(/^ROLE_/, '') || ROLES.STAFF,
+    role: profile.role || (current.role && current.role.replace(/^ROLE_/, '')) || ROLES.STAFF,
     isActive: profile.isActive !== false,
   });
   persistUser(userData);
@@ -271,7 +283,8 @@ function serviceErrorFor(message, status = 400) {
 
 function wrapCallableError(e, fallback) {
   const message = (e && e.message) || fallback;
-  const status = (e && e.code === 'functions/permission-denied') || (e && e.details && e.details.status === 'PERMISSION_DENIED') ? 403 : 400;
+  const isPermission = (e && e.code === 'functions/permission-denied') || (e && e.details && e.details.status === 'PERMISSION_DENIED');
+  const status = isPermission ? 403 : 400;
   return serviceErrorFor(message, status);
 }
 
