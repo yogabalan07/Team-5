@@ -204,9 +204,9 @@ const Dashboard = () => {
       button
       onClick={() => {
         if (type === 'SALE') {
-          navigate(`/sales/invoices/${transaction.id}`);
+          navigate(`/sales/invoice/${transaction.id}`);
         } else {
-          navigate(`/purchase/invoices/${transaction.id}`);
+          navigate('/purchases/list');
         }
       }}
     >

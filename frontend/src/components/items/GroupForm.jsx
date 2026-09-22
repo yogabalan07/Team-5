@@ -1,191 +1,134 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  IconButton,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogContentText,
   DialogActions,
-  LinearProgress,
-  Chip,
+  TextField,
+  Button,
+  Box,
+  CircularProgress,
+  Alert,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
-import { Add, Edit, Delete, Straighten } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { unitService } from '../../services/unitService';
-import UnitForm from './UnitForm';
+import { groupService } from '../../services/groupService';
 
-const UnitList = () => {
-  const [units, setUnits] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [formOpen, setFormOpen] = useState(false);
-  const [selectedUnit, setSelectedUnit] = useState(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+const GroupForm = ({ open, onClose, group, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    isActive: true,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchUnits();
-  }, []);
+    if (group) {
+      setFormData({
+        name: group.name || '',
+        description: group.description || '',
+        isActive: group.isActive !== undefined ? group.isActive : true,
+      });
+    } else {
+      setFormData({
+        name: '',
+        description: '',
+        isActive: true,
+      });
+    }
+  }, [group, open]);
 
-  const fetchUnits = async () => {
+  const handleChange = (e) => {
+    const { name, value, checked } = e.target;
+    setFormData({
+      ...formData,
+      [name]: name === 'isActive' ? checked : value,
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.name.trim()) {
+      setError('Group name is required');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
     try {
-      setLoading(true);
-      const data = await unitService.getAll();
-      setUnits(data);
+      if (group) {
+        await groupService.update(group.id, formData);
+        toast.success('Group updated successfully');
+      } else {
+        await groupService.create(formData);
+        toast.success('Group created successfully');
+      }
+      onSuccess();
+      onClose();
     } catch (error) {
-      toast.error('Failed to fetch units');
+      setError(error.response?.data?.error || error.message || 'Failed to save group');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async () => {
-    try {
-      await unitService.delete(selectedUnit.id);
-      toast.success('Unit deleted successfully');
-      setDeleteDialogOpen(false);
-      fetchUnits();
-    } catch (error) {
-      toast.error('Failed to delete unit');
-    }
-  };
-
   return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4" fontWeight="bold">
-            Units
-          </Typography>
-          <Typography variant="body2" color="textSecondary">
-            Manage units of measurement
-          </Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => {
-            setSelectedUnit(null);
-            setFormOpen(true);
-          }}
-          sx={{ borderRadius: 2 }}
-        >
-          Add Unit
-        </Button>
-      </Box>
-
-      <Paper sx={{ p: 2, borderRadius: 2 }}>
-        {loading ? (
-          <Box sx={{ width: '100%', py: 4 }}>
-            <LinearProgress />
-          </Box>
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ backgroundColor: '#f5f7fa' }}>
-                  <TableCell>#</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Short Name</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="center">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {units.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
-                      No units found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  units.map((unit, index) => (
-                    <TableRow key={unit.id} hover>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <Straighten sx={{ color: '#1976d2' }} />
-                          <Typography fontWeight={500}>{unit.name}</Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>{unit.shortName}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={unit.isActive ? 'Active' : 'Inactive'}
-                          color={unit.isActive ? 'success' : 'error'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Tooltip title="Edit">
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => {
-                              setSelectedUnit(unit);
-                              setFormOpen(true);
-                            }}
-                          >
-                            <Edit />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => {
-                              setSelectedUnit(unit);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Delete />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        {group ? 'Edit Group' : 'Add New Group'}
+      </DialogTitle>
+      <DialogContent>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+            {error}
+          </Alert>
         )}
-      </Paper>
-
-      <UnitForm
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setSelectedUnit(null);
-        }}
-        unit={selectedUnit}
-        onSuccess={fetchUnits}
-      />
-
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete Unit</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete unit "{selectedUnit?.name}"?
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleDelete} color="error" variant="contained">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        <Box sx={{ mt: 2 }}>
+          <TextField
+            fullWidth
+            label="Group Name"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            required
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            label="Description"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            multiline
+            rows={2}
+            sx={{ mb: 2 }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                name="isActive"
+                checked={formData.isActive}
+                onChange={handleChange}
+                color="primary"
+              />
+            }
+            label="Active"
+          />
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
+          disabled={loading}
+        >
+          {loading ? <CircularProgress size={24} /> : (group ? 'Update' : 'Create')}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
-export default UnitList;
+export default GroupForm;
