@@ -4,25 +4,37 @@ service cloud.firestore {
 
     // ------------------------------------------------------------------
     // Helpers
+    //
+    // Roles and account status live in the user's profile document
+    // (users/{uid}.role and users/{uid}.isActive). The profile is the sole
+    // source of truth; no custom claims are involved. The profile is created
+    // by the user themselves during self-registration (forced STAFF) or by the
+    // first-admin bootstrap (below), and can only be changed by an ADMIN.
     // ------------------------------------------------------------------
     function isSignedIn() {
       return request.auth != null && request.auth.uid != null;
     }
 
+    // Enabled = signed in AND that user's profile says active.
     function isEnabled() {
-      return isSignedIn() && request.auth.token.disabled != true;
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true;
+    }
+
+    function profileRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
     function isAdmin() {
-      return isEnabled() && request.auth.token.role == 'ADMIN';
-    }
-
-    function hasRole(role) {
-      return isEnabled() && request.auth.token.role == role;
+      return isEnabled() && profileRole() == 'ADMIN';
     }
 
     function hasAny(roles) {
-      return isEnabled() && request.auth.token.role in roles;
+      return isEnabled() && profileRole() in roles;
+    }
+
+    function isValidRole(role) {
+      return role in ['ADMIN', 'BILLING_CLERK', 'ACCOUNTS', 'PURCHASE_MANAGER', 'STORE_MANAGER', 'STAFF'];
     }
 
     // True when an update touches ONLY the listed fields. Used to let the
@@ -35,12 +47,57 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------
-    // users — created/managed ONLY by Cloud Functions. Reads: own profile
-    // or admin. Client-side writes are disabled.
+    // bootstrap — first-admin gate.
+    //
+    // On a fresh system NO account can create an ADMIN profile unless it first
+    // secures bootstrap/lock. The app does this atomically on the very first
+    // registration (transaction): it wins bootstrap/lock and creates the
+    // matching ADMIN profile. Every later registration sees the lock and is
+    // forced to STAFF. Firestore transactions are serialized server-side, so
+    // two concurrent first registrations cannot both become admins.
+    // Once the lock exists, admin rights can only be granted by an ADMIN.
+    // ------------------------------------------------------------------
+    match /bootstrap/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        docId == 'lock' &&
+        request.resource.data.adminUid == request.auth.uid &&
+        !exists(/databases/$(database)/documents/bootstrap/lock);
+      allow update, delete: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // users — the only collection a client ever creates.
+    //   - create: the signed-in user may create ONLY their own profile,
+    //     forced to STAFF + active; the bootstrap lock holder may create the
+    //     ADMIN profile. No other creation path exists.
+    //   - update: ADMIN only. An admin may manage any OTHER user directly
+    //     (role/status/profile). An admin may update their OWN profile only in
+    //     ways that keep it ADMIN + active, so a locked system can't be
+    //     created by a self-demotion or self-deactivation.
+    //   - delete: never (accounts are deactivated, not removed; auth identity
+    //     deletion requires the Admin SDK which is unavailable on Spark).
     // ------------------------------------------------------------------
     match /users/{userId} {
       allow read: if isEnabled() && (request.auth.uid == userId || isAdmin());
-      allow create, update, delete: if false;
+      allow create: if isSignedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.isActive == true &&
+        (
+          request.resource.data.role == 'STAFF' ||
+          (request.resource.data.role == 'ADMIN' &&
+            get(/databases/$(database)/documents/bootstrap/lock).data.adminUid == request.auth.uid)
+        );
+      allow update: if isAdmin() &&
+        (
+          (request.auth.uid == userId &&
+            request.resource.data.role == 'ADMIN' &&
+            request.resource.data.isActive == true) ||
+          (request.auth.uid != userId &&
+            isValidRole(request.resource.data.role))
+        );
+      allow delete: if false;
     }
 
     // ------------------------------------------------------------------

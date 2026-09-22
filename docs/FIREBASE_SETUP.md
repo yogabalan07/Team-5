@@ -1,8 +1,10 @@
 # Firebase setup
 
-This project runs entirely on Firebase (Auth + Firestore + Functions + Hosting).
-The legacy Spring Boot backend, MySQL schema and Docker compose files were
-removed in the migration; nothing else needs to be hosted.
+This project runs entirely on Firebase's **Spark (free) plan**: Authentication +
+Firestore + Hosting + Security Rules. There are **no Cloud Functions** and **no
+Firebase Storage** — the app needs no paid/billing services. The legacy Spring
+Boot backend, MySQL schema and Docker compose files were removed in the
+migration; nothing else needs to be hosted.
 
 ## 1. Create the Firebase project
 
@@ -43,7 +45,7 @@ credentials out of the repository regardless.
 2. Choose **Production mode**, pick a region, and finish.
 3. Deploy the rules and indexes when ready (below).
 
-## 5. Deploy rules, functions and hosting
+## 5. Deploy hosting and Firestore rules
 
 Install the Firebase CLI once:
 
@@ -57,33 +59,42 @@ Bind the repo to your project:
 npx firebase use <your-project-id>
 ```
 
-Deploy everything:
+Deploy everything (free tier — no functions, no storage):
 
 ```bash
 npm run build --prefix frontend
-npx firebase deploy
+npx firebase deploy --only hosting,firestore:rules
 ```
 
-This pushes `firestore.rules`, `firestore.indexes.json`, the Cloud Functions in
-`functions/`, and the built frontend from `frontend/build`.
+This pushes `firestore.rules`, `firestore.indexes.json`, and the built frontend
+from `frontend/build`.
 
-To push only one target: `npx firebase deploy --only firestore`, `--only
-functions`, or `--only hosting`.
+To push only one target: `npx firebase deploy --only firestore` or `--only
+hosting`.
 
-## 6. Create the first admin
+## 6. Create the first admin (bootstrap)
 
-The rules and the app only allow `ADMIN` accounts to manage users. To
-bootstrap your first administrator, run the exported `bootstrapAdmin` Cloud
-Function once (it refuses to run once any admin exists):
+The very **first Firebase Auth account that registers through the app becomes
+the system ADMIN**. This is done atomically in Firestore: the first
+registration claims a `bootstrap/lock` document and creates its matching ADMIN
+profile in the same transaction; every later registration is forced to the
+`STAFF` role. Nobody can upgrade their own role afterwards — the Firestore
+security rules only let an ADMIN change roles.
 
-```bash
-npx firebase functions:shell
-# in the shell:
-bootstrapAdmin({ username: 'root', email: 'you@example.com', password: 'changeme' })
-```
+> Important: as soon as a fresh project is deployed and **Email/Password**
+> sign-in is enabled, register the administrator account FIRST via the app's
+> Register page, before sharing the login URL. Anyone who registers first wins
+> the bootstrap.
 
-After that, log in through the web app and invite/assign further users from the
-**Admin → Users** screen (must be logged in as an admin).
+After the first admin exists, add users from the app's **Admin → Users**
+screen:
+- New accounts are created by self-registration (STAFF), then promoted to the
+  needed role.
+- Use **Deactivate** instead of Delete (the free plan has no Admin SDK, so auth
+  identities can't be removed; a deactivated account is completely blocked by
+  the security rules).
+- Use the **Reset Password** button to send the user a Firebase password-reset
+  email (the free plan can't force a new password server-side).
 
 ## 7. Verifying locally
 

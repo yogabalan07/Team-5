@@ -2,14 +2,15 @@
 
 A production-grade inventory management web app with sales, purchases, returns,
 accounts, reports and role-based access control. The application is fully
-serverless — the React frontend talks directly to Firebase Authentication,
-Cloud Firestore and Cloud Functions. There is no Node/Spring backend to host.
+serverless — the React frontend talks directly to Firebase Authentication and
+Cloud Firestore. There is no Node/Spring backend to host.
 
 ## Stack
 
 - **Frontend**: React 18 (Create React App), Material UI 5, Recharts
 - **Backend**: Firebase — Authentication (email/password), Cloud Firestore,
-  Cloud Functions (admin/user lifecycle callables), Hosting, Security Rules
+  Hosting, Security Rules. Runs entirely on the free Spark plan: no Cloud
+  Functions, no Firebase Storage, no paid services.
 - **Numbers & stock**: issued atomically via Firestore `runTransaction`
   (see `frontend/src/services/inventoryOps.js`)
 
@@ -20,8 +21,7 @@ frontend/              React application (CRA)
   src/firebase/        Firebase init + env-driven configuration
   src/services/        Data-access layer (Firestore-backed, REST-compatible)
   src/services/__tests__  Pure-logic unit tests
-functions/             Cloud Functions (privileged user operations, npm)
-firebase.json          Firebase config (rules + hosting + functions)
+firebase.json          Firebase config (rules + hosting)
 firestore.rules        Firestore security rules
 .branches/.firebaserc  Firebase project binding
 ```
@@ -32,7 +32,6 @@ firestore.rules        Firestore security rules
 
    ```bash
    npm install --prefix frontend
-   npm install --prefix functions
    ```
 
 2. Copy `frontend/.env.example` to `frontend/.env` and fill in your Firebase
@@ -67,20 +66,22 @@ firestore.rules        Firestore security rules
 | `ACCOUNTS`         | Bill receipts, bill payments, account ledger                   |
 | `STAFF`            | Default role for self-registered accounts (read access)        |
 
-Self-registration always creates a `STAFF` account. The very first account is
-bootstrap-administered via the `bootstrapAdmin` Cloud Function — it only works
-while the system has no `ADMIN` yet.
+Self-registration always creates a `STAFF` account. The very first account to
+register on a fresh system becomes the system `ADMIN` (atomic bootstrap); after
+that, roles are managed by an admin from the **Admin → Users** screen.
 
 ## Data model
 
 Core collections: `customers`, `suppliers`, `itemBrands`, `itemGroups`,
 `itemSections`, `units`, `taxes`, `items`, `purchaseOrders`, `purchaseInvoices`,
 `salesInvoices`, `salesReturns`, `purchaseReturns`, `billReceipts`,
-`billPayments`, `stockTransactions`, `counters`, `users`.
+`billPayments`, `stockTransactions`, `counters`, `users`, `bootstrap`.
 
-All master/service reads deny authenticated users nothing except adversarial
-client writes, which are gated by role in `firestore.rules`. Profile documents
-and role assignment can only be written through Cloud Functions.
+All reads are available to any enabled (active) authenticated user; writes are
+gated by role in `firestore.rules`, which reads each user's role from their
+profile document (`users/{uid}.role`). The profile is created during
+self-registration (forced `STAFF`) or by the first-admin bootstrap, and can
+only be changed by an `ADMIN`.
 
 ## Document numbering
 
@@ -93,8 +94,10 @@ the document.
 
 ```bash
 npm run build --prefix frontend
-npx firebase deploy
+npx firebase deploy --only hosting,firestore:rules
 ```
 
 You must be logged in (`npx firebase login`) and the project must be bound
-hosting + functions + firestore. See [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
+(hosting + firestore). See [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
+The app runs entirely on the free Spark plan; enabling Blaze is not required
+and no dashboard feature depends on it.

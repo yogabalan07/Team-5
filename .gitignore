@@ -21,7 +21,7 @@ Thumbs.db
 # Firebase
 .firebase/
 *.cache
-functions/node_modules/
+firebase-debug.log
 
 # OS artifacts
 *.msi

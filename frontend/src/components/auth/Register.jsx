@@ -218,7 +218,15 @@ const Register = () => {
             </Button>
           </form>
 
-          <Box mt={3} textAlign="center">
+          <Box mt={1} textAlign="center">
+            <Typography variant="caption" color="textSecondary">
+              The first account to register on a fresh system becomes the
+              system administrator. Every later registration gets the STAFF
+              role until an admin promotes it.
+            </Typography>
+          </Box>
+
+          <Box mt={2} textAlign="center">
             <Typography variant="body2">
               Already have an account?{' '}
               <Link to="/login" style={{ color: '#1976d2', textDecoration: 'none' }}>

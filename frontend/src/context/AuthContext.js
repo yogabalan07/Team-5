@@ -37,14 +37,11 @@ export const AuthProvider = ({ children }) => {
           finish(null);
           return;
         }
-        let role = null;
         let profile = null;
         try {
-          const claims = await authService.refreshClaims();
-          if (claims && claims.role) role = claims.role;
           profile = await authService.loadProfile(firebaseUser.uid);
         } catch (e) {
-          // claims/profile may lag right after first sign-in
+          // profile may lag right after first sign-in
         }
         if (cancelled) return;
         const userData = authService.buildUserObject({
@@ -53,7 +50,7 @@ export const AuthProvider = ({ children }) => {
           email: firebaseUser.email || '',
           fullName: (profile && profile.fullName) || '',
           phone: (profile && profile.phone) || '',
-          role: role || (profile && profile.role) || undefined,
+          role: (profile && profile.role) || undefined,
           isActive: profile ? profile.isActive !== false : true,
           token: '',
         });

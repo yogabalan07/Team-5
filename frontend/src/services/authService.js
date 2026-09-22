@@ -2,8 +2,11 @@
 //
 // Firebase Authentication replaces the legacy JWT/localStorage auth.
 // - Sign in / sign out / password reset go through Firebase Auth.
-// - Role lives in the user's profile document AND in Firebase Auth custom
-//   claims so Firestore security rules can enforce permissions.
+// - Role and account status live ONLY in the user's profile document
+//   (users/{uid}.role / users/{uid}.isActive), which Firestore security rules
+//   treat as the source of truth. No Cloud Functions, no custom claims.
+// - self-registration creates the profile client-side; the very first account
+//   to register on a fresh system becomes the ADMIN (atomic bootstrap).
 // - localStorage['user'] / localStorage['token'] are kept as a lightweight
 //   synchronous cache so existing components that read them keep working.
 
@@ -13,14 +16,22 @@ import {
   sendPasswordResetEmail,
   signOut,
   getIdToken,
-  getIdTokenResult,
   onAuthStateChanged,
 } from '@firebase/auth';
-import { doc, getDoc } from '@firebase/firestore';
-import { getFunctions, httpsCallable } from '@firebase/functions';
+import {
+  doc,
+  getDoc,
+  getDocs,
+  collection,
+  query,
+  where,
+  limit,
+  runTransaction,
+  serverTimestamp,
+} from '@firebase/firestore';
 import { auth, db } from '../firebase/firebase';
 import { isFirebaseConfigured, firebaseSetupMessage } from '../firebase/config';
-import { ROLES } from './businessLogic';
+import { ROLES, DEFAULT_SELF_REGISTERED_ROLE, buildSearchText } from './businessLogic';
 
 const USER_KEY = 'user';
 const TOKEN_KEY = 'token';
@@ -101,36 +112,22 @@ export async function loadProfile(uid) {
   return profile;
 }
 
-export async function refreshClaims() {
-  if (!isConfigured() || !auth.currentUser) return null;
-  const tokenResult = await getIdTokenResult(auth.currentUser, true);
-  return tokenResult.claims;
-}
-
-// Login. Accepts an email address. Returns shaped user data.
+// Login. Accepts an email address. Returns shaped user data. Role and status
+// come from the Firestore profile (not auth claims).
 export async function login(email, password) {
   if (!isConfigured()) throw serviceErrorFor(firebaseSetupMessage(), 500);
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   const firebaseUser = userCredential.user;
 
-  let role = ROLES.STAFF;
   let profile = null;
-  let disabledClaim = false;
   try {
-    const tokenResult = await getIdTokenResult(firebaseUser, true);
-    if (tokenResult.claims && tokenResult.claims.role) {
-      role = tokenResult.claims.role;
-    }
-    if (tokenResult.claims && tokenResult.claims.disabled === true) {
-      disabledClaim = true;
-    }
     profile = await loadProfile(firebaseUser.uid);
   } catch (e) {
-    // Profile/claims may be briefly unavailable right after bootstrap; fall back.
+    // Profile may be briefly unavailable right after bootstrap; fall back.
     profile = null;
   }
 
-  if (disabledClaim || (profile && profile.isActive === false)) {
+  if (profile && profile.isActive === false) {
     try { await signOut(auth); } catch (e) { /* ignore */ }
     const err = new Error('Your account is inactive. Contact an administrator.');
     err.code = 'auth/user-disabled';
@@ -138,6 +135,7 @@ export async function login(email, password) {
     throw err;
   }
 
+  const role = (profile && profile.role) || DEFAULT_SELF_REGISTERED_ROLE;
   const userData = buildUserObject({
     uid: firebaseUser.uid,
     username: (profile && profile.username) || firebaseUser.email || '',
@@ -153,17 +151,59 @@ export async function login(email, password) {
   return userData;
 }
 
-// Register a new self-service account. The registered user automatically gets
-// the default STAFF role (never ADMIN); an admin must promote them.
+// Register a new self-service account.
+//
+// The FIRST account ever registered on a fresh system becomes the system
+// ADMIN (atomic bootstrap). Every later registration is forced to the
+// default STAFF role; an admin promotes people afterwards.
+//
+// This runs as a single Firestore transaction so two concurrent first
+// registrations cannot both win the role: the winner secures bootstrap/lock
+// (server-side serialized) and creates the matching ADMIN profile; the loser
+// is created as STAFF.
 export async function register({ username, email, password, fullName = '', phone = '' }) {
   if (!isConfigured()) throw serviceErrorFor(firebaseSetupMessage(), 500);
+
+  const trimmedUsername = String(username || '').trim();
+  const emailLower = String(email || '').trim().toLowerCase();
+  if (!trimmedUsername || !emailLower) throw serviceErrorFor('Username and email are required', 400);
+
+  const existing = await getDocs(query(collection(db, 'users'), where('usernameLower', '==', trimmedUsername.toLowerCase()), limit(1)));
+  if (!existing.empty) throw serviceErrorFor(`Username "${trimmedUsername}" is already taken`, 400);
+
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   const firebaseUser = userCredential.user;
 
+  let role = DEFAULT_SELF_REGISTERED_ROLE;
   try {
-    const functions = getFunctions();
-    const createProfile = httpsCallable(functions, 'registerUser');
-    await createProfile({ username, fullName, phone, email });
+    await runTransaction(db, async (transaction) => {
+      const lockRef = doc(db, 'bootstrap', 'lock');
+      const profileRef = doc(db, 'users', firebaseUser.uid);
+      const lockSnap = await transaction.get(lockRef);
+      const firstAdmin = !lockSnap.exists();
+      if (firstAdmin) {
+        transaction.set(lockRef, {
+          adminUid: firebaseUser.uid,
+          username: trimmedUsername,
+          email: emailLower,
+          createdAt: serverTimestamp(),
+        });
+        role = ROLES.ADMIN;
+      }
+      transaction.set(profileRef, {
+        uid: firebaseUser.uid,
+        username: trimmedUsername,
+        usernameLower: trimmedUsername.toLowerCase(),
+        email: emailLower,
+        fullName: String(fullName || ''),
+        phone: String(phone || ''),
+        role,
+        isActive: true,
+        searchText: buildSearchText(trimmedUsername, fullName, emailLower),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
   } catch (e) {
     // The auth user was created, but profile creation failed; delete the auth
     // user so the user can retry registration cleanly.
@@ -172,10 +212,10 @@ export async function register({ username, email, password, fullName = '', phone
     } catch (cleanupErr) {
       // ignore cleanup failure
     }
-    throw wrapCallableError(e, 'Registration could not be completed. Please try again.');
+    throw wrapFirestoreError(e, 'Registration could not be completed. Please try again.');
   }
 
-  return { success: true, uid: firebaseUser.uid, email: firebaseUser.email };
+  return { success: true, uid: firebaseUser.uid, email: firebaseUser.email, role };
 }
 
 export function resetPassword(email) {
@@ -281,10 +321,12 @@ function serviceErrorFor(message, status = 400) {
   return err;
 }
 
-function wrapCallableError(e, fallback) {
+function wrapFirestoreError(e, fallback) {
   const message = (e && e.message) || fallback;
-  const isPermission = (e && e.code === 'functions/permission-denied') || (e && e.details && e.details.status === 'PERMISSION_DENIED');
-  const status = isPermission ? 403 : 400;
+  const code = (e && e.code) || '';
+  const isPermission = code === 'permission-denied' || code === 'PERMISSION_DENIED';
+  const isUnavailable = code === 'unavailable' || code === 'aborted' || code === 'resource-exhausted';
+  const status = isPermission ? 403 : isUnavailable ? 503 : 400;
   return serviceErrorFor(message, status);
 }
 
@@ -303,7 +345,6 @@ const authService = {
   onAuthChange,
   refreshUserProfile,
   loadProfile,
-  refreshClaims,
 };
 
 export default authService;

@@ -1,29 +1,36 @@
 // src/services/userService.js
-// User management is privileged. All creates/updates/deletes go through admin
-// Cloud Functions (never direct Firestore writes), which mirror the legacy
-// admin-only endpoints. Profile reads come from the users collection.
+// User management on the Spark plan (no Cloud Functions, no Admin SDK).
+//
+// Reads come straight from the users collection. Admin mutations are direct
+// Firestore writes that the security rules restrict to ADMIN accounts.
+//
+// Spark limitations (enforced by the rules + client guards):
+//   - Accounts cannot be DELETED (deleting an auth identity needs the Admin
+//     SDK). Deactivate (isActive=false) instead — the rules then block the
+//     whole system for that user.
+//   - Accounts cannot be CREATED by an admin (creating an auth identity needs
+//     the Admin SDK). Users self-register (STAFF) and an admin promotes them.
+//   - Passwords cannot be set by an admin (needs the Admin SDK). The admin can
+//     trigger the Firebase "reset password" email instead.
 
 import { getDocs } from '@firebase/firestore';
-import { getFunctions, httpsCallable } from '@firebase/functions';
+import { sendPasswordResetEmail } from '@firebase/auth';
 import {
   col,
+  docOf,
   getByIdOr404,
   getPaged,
   serviceError,
   requireAuth,
+  currentUserId,
+  updateDoc,
+  serverTimestamp,
 } from './firestoreHelpers';
-import { nowISO, ROLES } from './businessLogic';
+import { auth } from '../firebase/firebase';
+import { nowISO, ROLES, buildSearchText } from './businessLogic';
 
 const USERS = 'users';
-
-function call(name) {
-  const functions = getFunctions();
-  return httpsCallable(functions, name);
-}
-
-function wrapError(e, fallback) {
-  return serviceError((e && e.message) || fallback, 400);
-}
+const VALID_ROLES = Object.values(ROLES);
 
 function asProfile(docData) {
   const role = docData.role || ROLES.STAFF;
@@ -42,6 +49,22 @@ function rolesFromIds(roleIds) {
     return String(roleIds[0]).replace(/^ROLE_/, '');
   }
   return ROLES.STAFF;
+}
+
+// Number of ADMIN profiles that are NOT the given user (optionally only
+// active ones). Used client-side to keep the system from losing its last
+// admin; the security rules additionally forbid an admin from demoting or
+// deactivating themselves.
+async function otherAdminCount(excludeUid, onlyActive = false) {
+  const snap = await getDocs(col(USERS));
+  let count = 0;
+  snap.forEach((d) => {
+    const data = d.data();
+    if (data.role === 'ADMIN' && d.id !== excludeUid) {
+      if (!onlyActive || data.isActive !== false) count += 1;
+    }
+  });
+  return count;
 }
 
 export const userService = {
@@ -75,70 +98,108 @@ export const userService = {
     return asProfile(data);
   },
 
-  async create(userData) {
+  // Admin "create user" is not possible on Spark (creating a Firebase Auth
+  // identity requires the Admin SDK). Users self-register as STAFF; an admin
+  // then promotes them via `update`.
+  async create() {
     requireAuth();
-    try {
-      const result = await call('adminCreateUser')({
-        username: userData.username,
-        email: userData.email,
-        password: userData.password,
-        fullName: userData.fullName || '',
-        phone: userData.phone || '',
-        role: rolesFromIds(userData.roleIds) || userData.role || ROLES.STAFF,
-        isActive: userData.isActive !== false,
-      });
-      return { id: (result.data && result.data.uid) || (result.data && result.data.id), ...userData };
-    } catch (e) {
-      throw wrapError(e, 'Could not create user');
-    }
+    throw serviceError(
+      'New accounts cannot be created from here on the free plan. Have the user register from the Register page (STAFF), then promote their role here.'
+    );
   },
 
   async update(id, userData) {
     requireAuth();
-    try {
-      const result = await call('adminUpdateUser')({
-        userId: id,
-        username: userData.username,
-        fullName: userData.fullName,
-        phone: userData.phone,
-        role: rolesFromIds(userData.roleIds) || userData.role,
-        isActive: userData.isActive,
-      });
-      return { ...result.data, id };
-    } catch (e) {
-      throw wrapError(e, 'Could not update user');
+    const target = await getByIdOr404(col(USERS), id);
+    const targetProfile = asProfile(target);
+    const nextRole = (rolesFromIds(userData.roleIds) || userData.role || targetProfile.role || ROLES.STAFF)
+      .replace(/^ROLE_/, '');
+    if (!VALID_ROLES.includes(nextRole)) {
+      throw serviceError(`Invalid role: ${nextRole}`);
     }
+    const nextActive = userData.isActive === undefined ? targetProfile.isActive : Boolean(userData.isActive);
+
+    // Self-service guards (mirror the legacy functions). The rules also block
+    // self-demotion and self-deactivation anyway.
+    if (id === currentUserId()) {
+      if (nextRole !== ROLES.ADMIN) {
+        throw serviceError('You cannot remove your own ADMIN role.');
+      }
+      if (!nextActive) {
+        throw serviceError('You cannot deactivate your own account.');
+      }
+    } else if (targetProfile.role === ROLES.ADMIN && (nextRole !== ROLES.ADMIN || !nextActive)) {
+      if (otherAdminCount(id) <= 0) {
+        throw serviceError('Cannot remove the last active admin account.');
+      }
+    }
+
+    const username = userData.username !== undefined && userData.username !== null
+      ? String(userData.username).trim()
+      : targetProfile.username;
+    if (String(username || '').length < 3) {
+      throw serviceError('Username must be at least 3 characters');
+    }
+    const fullName = userData.fullName !== undefined ? userData.fullName : targetProfile.fullName || '';
+    const phone = userData.phone !== undefined ? userData.phone : targetProfile.phone || '';
+    const email = userData.email !== undefined ? String(userData.email).trim().toLowerCase() : targetProfile.email || '';
+
+    const payload = {
+      username,
+      usernameLower: username.toLowerCase(),
+      fullName,
+      phone,
+      email,
+      role: nextRole,
+      isActive: nextActive,
+      searchText: buildSearchText(username, fullName, email),
+      updatedAt: serverTimestamp(),
+    };
+
+    await updateDoc(docOf(USERS, id), payload);
+    return { id, ...payload, roles: [{ id: nextRole, name: `ROLE_${nextRole}` }] };
   },
 
-  async delete(id) {
+  // Accounts cannot be DELETED on Spark (deleting the auth identity needs the
+  // Admin SDK). Deactivate instead.
+  async delete() {
     requireAuth();
-    try {
-      await call('adminDeleteUser')({ userId: id });
-      return { id, deleted: true };
-    } catch (e) {
-      throw wrapError(e, 'Could not delete user');
-    }
+    throw serviceError('Accounts cannot be deleted on the free plan. Use Deactivate instead.');
   },
 
-  async resetPassword(id, newPassword) {
+  // Admins can't set another user's password on Spark (needs the Admin SDK).
+  // Trigger the Firebase "reset password" email; the user picks the new
+  // password from the link Firebase sends.
+  async resetPassword(id) {
     requireAuth();
-    try {
-      await call('adminResetPassword')({ userId: id, newPassword: newPassword || 'password123' });
-      return { id, reset: true };
-    } catch (e) {
-      throw wrapError(e, 'Could not reset password');
+    const target = await getByIdOr404(col(USERS), id);
+    const email = (target && target.email) || '';
+    if (!email) {
+      throw serviceError('This user has no email address; password reset could not be sent.');
     }
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (e) {
+      throw serviceError('Could not send password reset email. Firebase only sends these for registered auth accounts.');
+    }
+    return { id, reset: true, email, message: `Password reset email sent to ${email}` };
   },
 
   async toggleStatus(id, isActive) {
     requireAuth();
-    const next = isActive === undefined ? !(await this.getById(id)).isActive : Boolean(isActive);
-    try {
-      await call('toggleUserStatus')({ userId: id, isActive: next });
-      return { id, isActive: next };
-    } catch (e) {
-      throw wrapError(e, 'Could not update user status');
+    const target = await getByIdOr404(col(USERS), id);
+    const targetProfile = asProfile(target);
+    const next = isActive === undefined ? targetProfile.isActive === false : Boolean(isActive);
+
+    if (id === currentUserId()) {
+      throw serviceError('You cannot deactivate your own account.');
     }
+    if (!next && targetProfile.role === ROLES.ADMIN && otherAdminCount(id, true) <= 0) {
+      throw serviceError('Cannot deactivate the last active admin account.');
+    }
+
+    await updateDoc(docOf(USERS, id), { isActive: next, updatedAt: serverTimestamp() });
+    return { id, isActive: next };
   },
 
   async getStats() {

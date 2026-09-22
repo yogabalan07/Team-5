@@ -30,20 +30,16 @@ import {
   Avatar,
 } from '@mui/material';
 import {
-  Add,
   Search,
   Edit,
-  Delete,
   Refresh,
   LockReset,
   AdminPanelSettings,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { userService } from '../../services/userService'; // ⭐ Make sure this is correct
-import { useAuth } from '../../context/AuthContext';
 
 const UserManagement = () => {
-  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
@@ -51,9 +47,7 @@ const UserManagement = () => {
   const [totalElements, setTotalElements] = useState(0);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [isEdit, setIsEdit] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [roles, setRoles] = useState([]);
   const [formData, setFormData] = useState({
     username: '',
@@ -102,32 +96,18 @@ const UserManagement = () => {
     fetchUsers();
   };
 
-  const handleOpenDialog = (user = null) => {
-    if (user) {
-      setIsEdit(true);
-      setSelectedUser(user);
-      setFormData({
-        username: user.username,
-        password: '',
-        email: user.email,
-        fullName: user.fullName || '',
-        phone: user.phone || '',
-        roleIds: user.roles.map(r => r.id),
-        isActive: user.isActive,
-      });
-    } else {
-      setIsEdit(false);
-      setSelectedUser(null);
-      setFormData({
-        username: '',
-        password: '',
-        email: '',
-        fullName: '',
-        phone: '',
-        roleIds: [],
-        isActive: true,
-      });
-    }
+  const handleOpenDialog = (user) => {
+    if (!user) return;
+    setSelectedUser(user);
+    setFormData({
+      username: user.username,
+      password: '',
+      email: user.email,
+      fullName: user.fullName || '',
+      phone: user.phone || '',
+      roleIds: user.roles ? user.roles.map((r) => r.id) : [],
+      isActive: user.isActive,
+    });
     setError('');
     setDialogOpen(true);
   };
@@ -155,10 +135,6 @@ const UserManagement = () => {
       setError('Please enter a valid email address');
       return;
     }
-    if (!isEdit && (!formData.password || formData.password.length < 6)) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
     if (formData.roleIds.length === 0) {
       setError('Please select at least one role');
       return;
@@ -178,26 +154,10 @@ const UserManagement = () => {
         isActive: formData.isActive,
       };
 
-      // Only include password if it's provided (for new users or when changing password)
-      if (formData.password && formData.password.trim() !== '') {
-        requestData.password = formData.password;
-      }
-
       console.log('📤 Sending user data:', requestData);
 
-      let response;
-      if (isEdit && selectedUser) {
-        response = await userService.update(selectedUser.id, requestData);
-        toast.success('User updated successfully');
-      } else {
-        // For new user, password is required
-        if (!requestData.password) {
-          setError('Password is required for new users');
-          return;
-        }
-        response = await userService.create(requestData);
-        toast.success('User created successfully');
-      }
+      const response = await userService.update(selectedUser.id, requestData);
+      toast.success('User updated successfully');
 
       console.log('✅ Response:', response);
       handleCloseDialog();
@@ -228,21 +188,6 @@ const UserManagement = () => {
     }
   };
 
-  const handleDelete = async () => {
-    try {
-      setLoading(true);
-      await userService.delete(selectedUser.id);
-      toast.success('User deleted successfully');
-      setDeleteDialogOpen(false);
-      fetchUsers();
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      toast.error('Failed to delete user');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleToggleStatus = async (user) => {
     try {
       await userService.toggleStatus(user.id);
@@ -255,13 +200,14 @@ const UserManagement = () => {
   };
 
   const handleResetPassword = async (user) => {
-    if (window.confirm(`Reset password for ${user.username} to default?`)) {
+    if (window.confirm(`Send a password reset email to ${user.email || user.username}?`)) {
       try {
-        await userService.resetPassword(user.id);
-        toast.success('Password reset successfully to: password123');
+        const result = await userService.resetPassword(user.id);
+        toast.success(result.message || 'Password reset email sent');
+        fetchUsers();
       } catch (error) {
         console.error('Error resetting password:', error);
-        toast.error('Failed to reset password');
+        toast.error(error.response?.data?.error || 'Failed to send password reset email');
       }
     }
   };
@@ -286,13 +232,12 @@ const UserManagement = () => {
             Manage system users and their roles
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => handleOpenDialog()}
-        >
-          Add User
-        </Button>
+        <Alert severity="info" sx={{ mb: 2, maxWidth: 560 }}>
+          On the free (Spark) plan, accounts are created by self-registration
+          (STAFF role) from the Register page. Use Edit here to change roles,
+          profile fields or status. Use Deactivate instead of Delete, and the
+          Reset Password button sends a password reset email to the user.
+        </Alert>
       </Box>
 
       {error && (
@@ -417,30 +362,16 @@ const UserManagement = () => {
                                 />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title="Reset Password">
-                              <IconButton
-                                size="small"
-                                color="info"
-                                onClick={() => handleResetPassword(user)}
-                              >
-                                <LockReset />
-                              </IconButton>
-                            </Tooltip>
-                            {user.id !== currentUser?.id && (
-                              <Tooltip title="Delete">
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  onClick={() => {
-                                    setSelectedUser(user);
-                                    setDeleteDialogOpen(true);
-                                  }}
-                                >
-                                  <Delete />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </Box>
+<Tooltip title="Reset Password">
+      <IconButton
+        size="small"
+        color="info"
+        onClick={() => handleResetPassword(user)}
+      >
+        <LockReset />
+      </IconButton>
+    </Tooltip>
+  </Box>
                         </TableCell>
                       </TableRow>
                     ))
@@ -465,10 +396,10 @@ const UserManagement = () => {
         )}
       </Paper>
 
-      {/* Add/Edit User Dialog */}
+      {/* Edit User Dialog */}
       <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {isEdit ? 'Edit User' : 'Add New User'}
+          Edit User — {selectedUser ? selectedUser.username : ''}
         </DialogTitle>
         <DialogContent>
           <Box display="flex" flexDirection="column" gap={2} mt={1}>
@@ -478,16 +409,6 @@ const UserManagement = () => {
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
               fullWidth
               required
-              disabled={isEdit}
-            />
-            <TextField
-              label={isEdit ? 'New Password (leave blank to keep current)' : 'Password'}
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              fullWidth
-              required={!isEdit}
-              helperText={isEdit ? "Leave blank to keep current password" : "Minimum 6 characters"}
             />
             <TextField
               label="Email"
@@ -554,29 +475,7 @@ const UserManagement = () => {
             onClick={handleSubmit}
             disabled={loading}
           >
-            {loading ? 'Saving...' : isEdit ? 'Update' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete User</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete user "{selectedUser?.username}"?
-            This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleDelete}
-            disabled={loading}
-          >
-            {loading ? 'Deleting...' : 'Delete'}
+            {loading ? 'Saving...' : 'Update'}
           </Button>
         </DialogActions>
       </Dialog>

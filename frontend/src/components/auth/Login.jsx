@@ -20,6 +20,8 @@ import {
   Login as LoginIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
+import authService from '../../services/authService';
+import { toast } from 'react-toastify';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -42,6 +44,23 @@ const Login = () => {
       setError(result.error || 'Invalid credentials');
     }
     setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    setError('');
+    if (!username || !username.trim()) {
+      setError('Enter your email address above to reset your password');
+      return;
+    }
+    setLoading(true);
+    try {
+      await authService.resetPassword(username.trim());
+      toast.success('Password reset email sent. Check your inbox.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not send password reset email');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -146,7 +165,18 @@ const Login = () => {
             </Button>
           </form>
 
-          <Box mt={3} textAlign="center">
+          <Box mt={2} textAlign="center">
+            <Button
+              size="small"
+              onClick={handleForgotPassword}
+              disabled={loading}
+              sx={{ textTransform: 'none', color: '#1976d2' }}
+            >
+              Forgot password?
+            </Button>
+          </Box>
+
+          <Box mt={1} textAlign="center">
           
             <Divider sx={{ my: 2 }} />
       
