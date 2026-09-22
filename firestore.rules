@@ -1,0 +1,156 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isEnabled() {
+      return isSignedIn() && request.auth.token.disabled != true;
+    }
+
+    function isAdmin() {
+      return isEnabled() && request.auth.token.role == 'ADMIN';
+    }
+
+    function hasRole(role) {
+      return isEnabled() && request.auth.token.role == role;
+    }
+
+    function hasAny(roles) {
+      return isEnabled() && request.auth.token.role in roles;
+    }
+
+    // ------------------------------------------------------------------
+    // users — created/managed ONLY by Cloud Functions. Reads: own profile
+    // or admin. Client-side writes are disabled.
+    // ------------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isEnabled() && (request.auth.uid == userId || isAdmin());
+      allow create, update, delete: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // roles — static roster read by any enabled user; written by admins.
+    // ------------------------------------------------------------------
+    match /roles/{roleId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Master data
+    // ------------------------------------------------------------------
+    match /customers/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow delete: if isAdmin();
+    }
+
+    match /suppliers/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /itemBrands/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /itemGroups/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /itemSections/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /units/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /taxes/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /items/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Purchases
+    // ------------------------------------------------------------------
+    match /purchaseOrders/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+    }
+
+    match /purchaseInvoices/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+    }
+
+    // ------------------------------------------------------------------
+    // Sales
+    // ------------------------------------------------------------------
+    match /salesInvoices/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'BILLING_CLERK']);
+    }
+
+    match /salesReturns/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'BILLING_CLERK']);
+    }
+
+    match /purchaseReturns/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+    }
+
+    // ------------------------------------------------------------------
+    // Accounts
+    // ------------------------------------------------------------------
+    match /billReceipts/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'ACCOUNTS']);
+    }
+
+    match /billPayments/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'ACCOUNTS']);
+    }
+
+    // ------------------------------------------------------------------
+    // Counters — written automatically by transactional services to issue
+    // collision-free document numbers. Creates/updates need a signed-in,
+    // enabled user; deletes are admin-only.
+    // ------------------------------------------------------------------
+    match /counters/{counterId} {
+      allow read: if isEnabled();
+      allow create, update: if isEnabled();
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Stock journal — read by reports; written by transactional services.
+    // ------------------------------------------------------------------
+    match /stockTransactions/{docId} {
+      allow read: if isEnabled();
+      allow create: if isEnabled();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+  }
+}

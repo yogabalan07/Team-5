@@ -19,7 +19,7 @@ import {
   Lock,
   HowToReg,
 } from '@mui/icons-material';
-import api from '../../services/api';
+import api from '../../services/authService';
 import { toast } from 'react-toastify';
 
 const Register = () => {
@@ -54,14 +54,16 @@ const Register = () => {
     setLoading(true);
 
     try {
-      await api.post('/auth/register', {
+      await api.register({
         username: formData.username,
+        email: formData.email,
         password: formData.password,
+        fullName: formData.fullName,
       });
       toast.success('Registration successful! Please login.');
       navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.error || 'Registration failed');
+      setError(err.response?.data?.error || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -43,7 +43,12 @@ import {
   Purchase,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import api from '../../services/api';
+import customerService from '../../services/customerService';
+import supplierService from '../../services/supplierService';
+import itemService from '../../services/itemService';
+import salesService from '../../services/salesService';
+import purchaseService from '../../services/purchaseService';
+import { reportService } from '../../services/reportService';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -67,60 +72,49 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [
-        customersRes,
-        suppliersRes,
-        itemsRes,
-        salesRes,
-        purchasesRes,
-        stockSummaryRes,
-        recentSalesRes,
-        recentPurchasesRes,
-      ] = await Promise.all([
-        api.get('/customers?page=0&size=1'),
-        api.get('/suppliers?page=0&size=1'),
-        api.get('/items?page=0&size=1'),
-        api.get('/sales/invoices?page=0&size=100'),
-        api.get('/purchase-invoices?page=0&size=100'),
-        api.get('/reports/stock/summary'),
-        api.get('/sales/invoices?page=0&size=5&sort=createdAt,desc'),
-        api.get('/purchase-invoices?page=0&size=5&sort=createdAt,desc'),
-      ]);
+      const [customersPage, suppliersPage, itemsPage, salesStats, purchaseStats, stockSummary, recentSalesData, recentPurchasesData] =
+        await Promise.all([
+          customerService.getAll(0, 1),
+          supplierService.getAll(0, 1),
+          itemService.getAll(0, 1),
+          salesService.getStats(),
+          purchaseService.getStats(),
+          reportService.getStockSummary(),
+          salesService.getRecent(),
+          purchaseService.getRecent(),
+        ]);
 
-      const totalSales = salesRes.data.content?.reduce(
-        (sum, inv) => sum + (inv.netAmount || 0),
-        0
-      ) || 0;
+      const recentSalesFormatted = (recentSalesData || []).slice(0, 5).map((inv) => ({
+        ...inv,
+        netAmount: inv.netAmount || inv.grandTotal || inv.totalAmount || 0,
+        totalAmount: inv.netAmount || inv.grandTotal || inv.totalAmount || 0,
+        customerName: inv.customerName || inv.supplierName || 'N/A',
+      }));
+      setRecentSales(recentSalesFormatted);
 
-      const totalPurchases = purchasesRes.data.content?.reduce(
-        (sum, inv) => sum + (inv.netAmount || 0),
-        0
-      ) || 0;
+      const recentPurchasesFormatted = (recentPurchasesData || []).slice(0, 5).map((inv) => ({
+        ...inv,
+        netAmount: inv.netAmount || inv.grandTotal || inv.totalAmount || 0,
+        totalAmount: inv.netAmount || inv.grandTotal || inv.totalAmount || 0,
+        supplierName: inv.supplierName || inv.customerName || 'N/A',
+      }));
+      setRecentPurchases(recentPurchasesFormatted);
 
-      // Get recent sales
-      const recentSalesData = recentSalesRes.data.content?.slice(0, 5) || [];
-      setRecentSales(recentSalesData);
-
-      // Get recent purchases
-      const recentPurchasesData = recentPurchasesRes.data.content?.slice(0, 5) || [];
-      setRecentPurchases(recentPurchasesData);
-
-      // Get stock summary
-      const stockSummary = stockSummaryRes.data || {};
+      const stockSummaryData = stockSummary || {};
 
       setStats({
-        totalCustomers: customersRes.data.totalElements || 0,
-        totalSuppliers: suppliersRes.data.totalElements || 0,
-        totalItems: itemsRes.data.totalElements || 0,
-        totalSales: totalSales,
-        totalPurchases: totalPurchases,
-        stockValue: stockSummary.totalStockValue || 0,
-        lowStockItems: stockSummary.lowStockItems || 0,
-        outOfStockItems: stockSummary.outOfStock || 0,
+        totalCustomers: customersPage.totalElements || 0,
+        totalSuppliers: suppliersPage.totalElements || 0,
+        totalItems: itemsPage.totalElements || 0,
+        totalSales: salesStats.totalSales || 0,
+        totalPurchases: purchaseStats.totalPurchases || 0,
+        stockValue: stockSummaryData.totalStockValue || 0,
+        lowStockItems: stockSummaryData.lowStockItems || 0,
+        outOfStockItems: stockSummaryData.outOfStock || 0,
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      toast.error('Failed to load dashboard data');
+      toast.error(error.response?.data?.error || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }

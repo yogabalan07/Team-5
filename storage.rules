@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // Profile photos / user uploads live under users/{uid}/.
+    match /users/{uid}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Anything else is not writable by clients.
+    match /{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+  }
+}

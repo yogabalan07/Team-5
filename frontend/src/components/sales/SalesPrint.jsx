@@ -30,6 +30,7 @@ import {
   CheckCircle,
 } from '@mui/icons-material';
 import { salesService } from '../../services/salesService';
+import authService from '../../services/authService';
 
 const SalesPrint = () => {
   const { id } = useParams();
@@ -75,7 +76,7 @@ const SalesPrint = () => {
       setLoading(true);
       setError('');
       
-      const token = localStorage.getItem('token');
+      const token = authService.isAuthenticated();
       if (!token) {
         setError('Please login first');
         setLoading(false);

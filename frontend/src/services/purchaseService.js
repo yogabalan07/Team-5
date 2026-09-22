@@ -1,463 +1,444 @@
-import api from './api';
+// src/services/purchaseService.js
+// Firestore-backed purchase orders + purchase invoices. Invoices touch stock
+// (add) inside a transaction; orders only reserve details (no stock change).
+
+import { getDocs, doc, query, where, limit } from 'firebase/firestore';
+import {
+  col,
+  docOf,
+  getByIdOr404,
+  getPaged,
+  serviceError,
+  requireAuth,
+  fromQuery,
+} from './firestoreHelpers';
+import {
+  invoiceTotals,
+  computePayment,
+  buildSearchText,
+  nowISO,
+  todayISO,
+  round2,
+  slicePage,
+  sortByCreatedDesc,
+} from './businessLogic';
+import { getCurrentUser } from './authService';
+import {
+  runStockTransaction,
+  nextNumber,
+  applyStockLine,
+  TYPE_PURCHASE,
+} from './inventoryOps';
+import { db } from '../firebase/firebase';
+
+const ORDERS = 'purchaseOrders';
+const INVOICES = 'purchaseInvoices';
+
+function actorName() {
+  const user = getCurrentUser();
+  return (user && (user.username || user.email)) || 'unknown';
+}
+
+function buildOrderItems(docId, lines) {
+  return (lines || []).map((line, index) => ({
+    id: `po_${docId}_${index + 1}`,
+    itemId: line.itemId ? String(line.itemId) : '',
+    itemName: line.itemName || '',
+    itemCode: line.itemCode || '',
+    quantity: round2(Number(line.quantity) || 0),
+    unitPrice: round2(Number(line.unitPrice) || 0),
+    totalAmount: round2(Number(line.totalAmount) || 0),
+    receivedQuantity: Number(line.receivedQuantity) || 0,
+    status: line.status || 'PENDING',
+  }));
+}
+
+function buildOrder(data, docId) {
+  const items = buildOrderItems(docId, data.items);
+  return {
+    poNumber: data.poNumber || '',
+    poDate: data.poDate || todayISO(),
+    expectedDate: data.expectedDate || '',
+    supplierId: data.supplierId ? String(data.supplierId) : '',
+    supplierName: data.supplierName || '',
+    items,
+    status: data.status || 'OPEN',
+    note: data.note || '',
+    createdBy: actorName(),
+    updatedAt: nowISO(),
+    searchText: buildSearchText(data.poNumber || '', data.supplierName || ''),
+  };
+}
+
+function buildInvoiceItems(docId, lines) {
+  return (lines || []).map((line, index) => ({
+    id: `pi_${docId}_${index + 1}`,
+    itemId: line.itemId ? String(line.itemId) : '',
+    itemName: line.itemName || '',
+    itemCode: line.itemCode || '',
+    quantity: round2(Number(line.quantity) || 0),
+    unitPrice: round2(Number(line.unitPrice) || 0),
+    discountPercent: Number(line.discountPercent) || 0,
+    taxPercent: Number(line.taxPercent) || 0,
+    totalAmount: round2(Number(line.totalAmount) || 0),
+    discountAmount: round2(Number(line.discountAmount) || 0),
+    taxAmount: round2(Number(line.taxAmount) || 0),
+  }));
+}
+
+function buildInvoice(docId, data, lines) {
+  const totals = invoiceTotals(lines);
+  const payment = computePayment(data.paymentType, totals.netAmount);
+  const paid = data.amountPaid !== undefined && Number(data.amountPaid) >= 0
+    ? round2(Number(data.amountPaid))
+    : payment.paidAmount;
+  const balance = round2(totals.netAmount - paid);
+  return {
+    invoiceNo: data.invoiceNo || '',
+    purchaseDate: data.purchaseDate || todayISO(),
+    supplierId: data.supplierId ? String(data.supplierId) : '',
+    supplierName: data.supplierName || '',
+    purchaseOrderId: data.purchaseOrderId ? String(data.purchaseOrderId) : '',
+    poNumber: data.poNumber || '',
+    items: lines,
+    subtotal: totals.totalAmount,
+    discountTotal: totals.discountAmount,
+    taxTotal: totals.taxAmount,
+    grandTotal: totals.netAmount,
+    paymentType: data.paymentType || 'CASH',
+    amountPaid: paid,
+    balanceAmount: balance,
+    note: data.note || '',
+    createdBy: actorName(),
+    updatedAt: nowISO(),
+    searchText: buildSearchText(data.invoiceNo || '', data.supplierName || ''),
+  };
+}
+
+function wrapStockError(e) {
+  return serviceError((e && e.message) || 'Could not save purchase invoice', (e && e.code === 'INSUFFICIENT_STOCK') ? 400 : 500);
+}
 
 export const purchaseService = {
-    // ==================== PURCHASE ORDER METHODS ====================
-    
-    /**
-     * Create a new purchase order
-     * POST /api/purchase-orders
-     */
-    createOrder: async (data) => {
-        try {
-            const response = await api.post('/purchase-orders', data);
-            return response.data;
-        } catch (error) {
-            console.error('Error creating purchase order:', error);
-            throw error;
+  // ---- Purchase orders --------------------------------------------------
+  async createOrder(data) {
+    requireAuth();
+    return runStockTransaction(async (tx) => {
+      const ref = doc(db, ORDERS);
+      const poNumber = await nextNumber(tx, 'PO', data.poDate || todayISO());
+      await tx.set(ref, {
+        ...buildOrder(data, ref.id),
+        poNumber,
+        createdAt: nowISO(),
+      });
+      return { poNumber, id: ref.id, orderId: ref.id };
+    });
+  },
+
+  async updateOrder(id, data) {
+    requireAuth();
+    const existing = await getByIdOr404(col(ORDERS), id);
+    await setOrderDoc(id, {
+      ...existing,
+      ...buildOrder(data, id),
+      poNumber: existing.poNumber,
+      createdAt: existing.createdAt,
+    });
+    return { poNumber: existing.poNumber, id };
+  },
+
+  async getAllOrders(page = 0, size = 20, search = '') {
+    return getPaged(col(ORDERS), { page, size, search });
+  },
+
+  async searchOrders(search, page = 0, size = 20) {
+    return getPaged(col(ORDERS), { page, size, search });
+  },
+
+  async getOrdersByDateRange(startDate, endDate, page = 0, size = 20) {
+    const items = await getByDateRangeRaw(ORDERS, 'poDate', startDate, endDate);
+    return pagedFromItems(items, page, size);
+  },
+
+  async getOrdersBySupplier(supplierId, page = 0, size = 2000) {
+    const snap = await getDocs(query(col(ORDERS), where('supplierId', '==', String(supplierId))));
+    const items = sortByCreatedDesc(fromQuery(snap));
+    return pagedFromItems(items, page, size);
+  },
+
+  async getOrderById(id) {
+    const data = await getByIdOr404(col(ORDERS), id);
+    return { ...data, items: data.items || [] };
+  },
+
+  async getOrderByPoNumber(poNumber) {
+    const snap = await getDocs(query(col(ORDERS), where('poNumber', '==', poNumber), limit(1)));
+    const docs = fromQuery(snap);
+    if (!docs.length) throw serviceError(`Purchase order ${poNumber} not found`, 404);
+    return { ...docs[0], items: docs[0].items || [] };
+  },
+
+  async deleteOrder(id) {
+    requireAuth();
+    await deleteOrderDoc(id);
+    return { id, deleted: true };
+  },
+
+  async convertOrderToInvoice(id) {
+    return this.convertOrder(id);
+  },
+
+  async convertOrder(id) {
+    requireAuth();
+    const existing = await getByIdOr404(col(ORDERS), id);
+    if (existing.status === 'COMPLETED') {
+      throw serviceError('Purchase order is already completed', 400);
+    }
+    await setOrderDoc(id, { status: 'COMPLETED', completedAt: nowISO(), updatedAt: nowISO() });
+    return { id, status: 'COMPLETED' };
+  },
+
+  // ---- Purchase invoices -------------------------------------------------
+  async getAll(page = 0, size = 20, search = '') {
+    return getPaged(col(INVOICES), { page, size, search });
+  },
+
+  async getAllInvoices(page = 0, size = 20) {
+    return getPaged(col(INVOICES), { page, size });
+  },
+
+  async getInvoicesByDateRange(startDate, endDate, dateType, page = 0, size = 20) {
+    const items = await getByDateRangeRaw(INVOICES, 'purchaseDate', startDate, endDate);
+    return pagedFromItems(items, page, size);
+  },
+
+  async search(search, page = 0, size = 20) {
+    return getPaged(col(INVOICES), { page, size, search });
+  },
+
+  async getById(id) {
+    const data = await getByIdOr404(col(INVOICES), id);
+    return { ...data, items: data.items || [] };
+  },
+
+  async getInvoiceByInvoiceNo(invoiceNo) {
+    const snap = await getDocs(query(col(INVOICES), where('invoiceNo', '==', invoiceNo), limit(1)));
+    const docs = fromQuery(snap);
+    if (!docs.length) throw serviceError(`Purchase invoice ${invoiceNo} not found`, 404);
+    return { ...docs[0], items: docs[0].items || [] };
+  },
+
+  async getInvoicesBySupplier(supplierId, page = 0, size = 2000) {
+    const snap = await getDocs(query(col(INVOICES), where('supplierId', '==', String(supplierId))));
+    const items = sortByCreatedDesc(fromQuery(snap));
+    return pagedFromItems(items, page, size);
+  },
+
+  async createInvoice(data) {
+    requireAuth();
+    const lines = (data.items || []).map((line) => ({
+      itemId: line.itemId ? String(line.itemId) : '',
+      itemName: line.itemName || '',
+      itemCode: line.itemCode || '',
+      quantity: Number(line.quantity) || 0,
+      unitPrice: Number(line.unitPrice) || 0,
+      discountPercent: Number(line.discountPercent) || 0,
+      taxPercent: Number(line.taxPercent) || 0,
+      totalAmount: Number(line.totalAmount) || 0,
+    }));
+    try {
+      return await runStockTransaction(async (tx) => {
+        const invoiceRef = doc(db, INVOICES);
+        const invoiceNo = await nextNumber(tx, 'PUR', data.purchaseDate || todayISO());
+        for (const line of lines) {
+          await applyStockLine(tx, {
+            itemId: line.itemId,
+            itemName: line.itemName,
+            itemCode: line.itemCode,
+            qty: line.quantity,
+            sign: 1,
+            type: TYPE_PURCHASE,
+            referenceNumber: invoiceNo,
+            referenceId: invoiceRef.id,
+          });
         }
-    },
+        const finalLines = buildInvoiceItems(invoiceRef.id, lines);
+        await tx.set(invoiceRef, {
+          ...buildInvoice(invoiceRef.id, { ...data, invoiceNo }, finalLines),
+          invoiceNo,
+          createdAt: nowISO(),
+        });
+        return { invoiceNo, id: invoiceRef.id, invoiceId: invoiceRef.id };
+      });
+    } catch (e) {
+      throw wrapStockError(e);
+    }
+  },
 
-    /**
-     * Get purchase order by ID
-     * GET /api/purchase-orders/{id}
-     */
-    getOrderById: async (id) => {
-        try {
-            const response = await api.get(`/purchase-orders/${id}`);
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching purchase order with ID ${id}:`, error);
-            throw error;
+  async updateInvoice(id, data) {
+    requireAuth();
+    const existing = await getByIdOr404(col(INVOICES), id);
+    const reversedLines = existing.items || [];
+    const newLines = (data.items || []).map((line) => ({
+      itemId: line.itemId ? String(line.itemId) : '',
+      itemName: line.itemName || '',
+      itemCode: line.itemCode || '',
+      quantity: Number(line.quantity) || 0,
+      unitPrice: Number(line.unitPrice) || 0,
+      discountPercent: Number(line.discountPercent) || 0,
+      taxPercent: Number(line.taxPercent) || 0,
+    }));
+    try {
+      return await runStockTransaction(async (tx) => {
+        for (const line of reversedLines) {
+          await applyStockLine(tx, {
+            itemId: line.itemId,
+            itemName: line.itemName,
+            itemCode: line.itemCode,
+            qty: line.quantity,
+            sign: -1,
+            type: TYPE_PURCHASE,
+            referenceNumber: existing.invoiceNo,
+            referenceId: id,
+          });
         }
-    },
-
-    /**
-     * Get purchase order by PO number
-     * GET /api/purchase-orders/number/{poNumber}
-     */
-    getOrderByPoNumber: async (poNumber) => {
-        try {
-            const response = await api.get(`/purchase-orders/number/${poNumber}`);
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching purchase order with PO number ${poNumber}:`, error);
-            throw error;
+        for (const line of newLines) {
+          await applyStockLine(tx, {
+            itemId: line.itemId,
+            itemName: line.itemName,
+            itemCode: line.itemCode,
+            qty: line.quantity,
+            sign: 1,
+            type: TYPE_PURCHASE,
+            referenceNumber: existing.invoiceNo,
+            referenceId: id,
+          });
         }
-    },
+        const finalLines = buildInvoiceItems(id, newLines);
+        await tx.set(docOf(INVOICES, id), {
+          ...buildInvoice(id, { ...data, invoiceNo: existing.invoiceNo }, finalLines),
+          invoiceNo: existing.invoiceNo,
+          createdAt: existing.createdAt,
+          updatedAt: nowISO(),
+        }, { merge: true });
+        return { invoiceNo: existing.invoiceNo, id };
+      });
+    } catch (e) {
+      throw wrapStockError(e);
+    }
+  },
 
-    /**
-     * Get all purchase orders with pagination
-     * GET /api/purchase-orders
-     */
-    getAllOrders: async (page = 0, size = 20) => {
-        try {
-            const params = { 
-                page, 
-                size,
-                sort: 'createdAt,desc'
-            };
-            const response = await api.get('/purchase-orders', { params });
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching purchase orders:', error);
-            throw error;
+  async deleteInvoice(id) {
+    requireAuth();
+    const existing = await getByIdOr404(col(INVOICES), id);
+    try {
+      await runStockTransaction(async (tx) => {
+        for (const line of existing.items || []) {
+          await applyStockLine(tx, {
+            itemId: line.itemId,
+            itemName: line.itemName,
+            itemCode: line.itemCode,
+            qty: line.quantity,
+            sign: -1,
+            type: TYPE_PURCHASE,
+            referenceNumber: existing.invoiceNo,
+            referenceId: id,
+          });
         }
-    },
+        tx.delete(docOf(INVOICES, id));
+      });
+      return { id, deleted: true };
+    } catch (e) {
+      throw wrapStockError(e);
+    }
+  },
 
-    /**
-     * Get purchase orders by supplier
-     * GET /api/purchase-orders/supplier/{supplierId}
-     */
-    getOrdersBySupplier: async (supplierId, page = 0, size = 20) => {
-        try {
-            const response = await api.get(`/purchase-orders/supplier/${supplierId}`, {
-                params: { page, size },
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching purchase orders for supplier ${supplierId}:`, error);
-            throw error;
-        }
-    },
+  async getRecent() {
+    const snap = await getDocs(query(col(INVOICES), limit(10)));
+    return sortByCreatedDesc(fromQuery(snap));
+  },
 
-    /**
-     * Get purchase orders by date range
-     * GET /api/purchase-orders/date-range
-     */
-    getOrdersByDateRange: async (startDate, endDate, page = 0, size = 20) => {
-        try {
-            const response = await api.get('/purchase-orders/date-range', {
-                params: { startDate, endDate, page, size },
-            });
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching purchase orders by date range:', error);
-            throw error;
-        }
-    },
+  async getStats() {
+    const snap = await getDocs(col(INVOICES));
+    let total = 0;
+    let count = 0;
+    snap.forEach((d) => {
+      total += Number(d.data().grandTotal) || 0;
+      count += 1;
+    });
+    return { totalPurchases: round2(total), count };
+  },
 
-    /**
-     * Get purchase orders by status
-     * GET /api/purchase-orders/status/{status}
-     */
-    getOrdersByStatus: async (status, page = 0, size = 20) => {
-        try {
-            const response = await api.get(`/purchase-orders/status/${status}`, {
-                params: { page, size },
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching purchase orders with status ${status}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get pending purchase orders
-     * GET /api/purchase-orders/pending
-     */
-    getPendingOrders: async (page = 0, size = 20) => {
-        try {
-            const response = await api.get('/purchase-orders/pending', {
-                params: { page, size },
-            });
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching pending purchase orders:', error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get converted purchase orders
-     * GET /api/purchase-orders/converted
-     */
-    getConvertedOrders: async (page = 0, size = 20) => {
-        try {
-            const response = await api.get('/purchase-orders/converted', {
-                params: { page, size },
-            });
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching converted purchase orders:', error);
-            throw error;
-        }
-    },
-
-    /**
-     * Search purchase orders
-     * GET /api/purchase-orders/search
-     */
-    searchOrders: async (search, page = 0, size = 20) => {
-        try {
-            const response = await api.get('/purchase-orders/search', {
-                params: { keyword: search, page, size },
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error searching purchase orders with term "${search}":`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get recent purchase orders
-     * GET /api/purchase-orders/recent
-     */
-    getRecentOrders: async (limit = 5) => {
-        try {
-            const response = await api.get('/purchase-orders/recent', {
-                params: { limit },
-            });
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching recent purchase orders:', error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get purchase order summary
-     * GET /api/purchase-orders/summary
-     */
-    getOrderSummary: async () => {
-        try {
-            const response = await api.get('/purchase-orders/summary');
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching purchase order summary:', error);
-            throw error;
-        }
-    },
-
-    /**
-     * Update purchase order
-     * PUT /api/purchase-orders/{id}
-     */
-    updateOrder: async (id, data) => {
-        try {
-            const response = await api.put(`/purchase-orders/${id}`, data);
-            return response.data;
-        } catch (error) {
-            console.error(`Error updating purchase order with ID ${id}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Convert purchase order to invoice
-     * POST /api/purchase-orders/{id}/convert
-     */
-    convertOrderToInvoice: async (id) => {
-        try {
-            const response = await api.post(`/purchase-orders/${id}/convert`);
-            return response.data;
-        } catch (error) {
-            console.error(`Error converting purchase order ${id} to invoice:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Delete purchase order
-     * DELETE /api/purchase-orders/{id}
-     */
-    deleteOrder: async (id) => {
-        try {
-            const response = await api.delete(`/purchase-orders/${id}`);
-            return response.data;
-        } catch (error) {
-            console.error(`Error deleting purchase order with ID ${id}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Bulk delete purchase orders
-     * DELETE /api/purchase-orders/bulk
-     */
-    bulkDeleteOrders: async (ids) => {
-        try {
-            const response = await api.delete('/purchase-orders/bulk', { 
-                data: ids 
-            });
-            return response.data;
-        } catch (error) {
-            console.error('Error bulk deleting purchase orders:', error);
-            throw error;
-        }
-    },
-
-    /**
-     * Export purchase orders to CSV
-     * GET /api/purchase-orders/export/csv
-     */
-    exportOrdersToCSV: async (startDate, endDate) => {
-        try {
-            const response = await api.get('/purchase-orders/export/csv', {
-                params: { startDate, endDate },
-                responseType: 'blob'
-            });
-            return response.data;
-        } catch (error) {
-            console.error('Error exporting purchase orders:', error);
-            throw error;
-        }
-    },
-
-    // ==================== PURCHASE INVOICE METHODS ====================
-
-    /**
-     * Create a new purchase invoice
-     * POST /api/purchase-invoices
-     */
-    createInvoice: async (data) => {
-        try {
-            const response = await api.post('/purchase-invoices', data);
-            return response.data;
-        } catch (error) {
-            console.error('Error creating purchase invoice:', error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get purchase invoice by ID
-     * GET /api/purchase-invoices/{id}
-     */
-    getInvoiceById: async (id) => {
-        try {
-            const response = await api.get(`/purchase-invoices/${id}`);
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching purchase invoice with ID ${id}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get purchase invoice by invoice number
-     * GET /api/purchase-invoices/number/{invoiceNo}
-     */
-    getInvoiceByInvoiceNo: async (invoiceNo) => {
-        try {
-            const response = await api.get(`/purchase-invoices/number/${invoiceNo}`);
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching purchase invoice with invoice number ${invoiceNo}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get all purchase invoices with pagination
-     * GET /api/purchase-invoices
-     */
-    getAllInvoices: async (page = 0, size = 20) => {
-        try {
-            const params = { 
-                page, 
-                size,
-                sort: 'createdAt,desc'
-            };
-            const response = await api.get('/purchase-invoices', { params });
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching purchase invoices:', error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get purchase invoices by supplier
-     * GET /api/purchase-invoices/supplier/{supplierId}
-     */
-    getInvoicesBySupplier: async (supplierId, page = 0, size = 20) => {
-        try {
-            const response = await api.get(`/purchase-invoices/supplier/${supplierId}`, {
-                params: { page, size },
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching purchase invoices for supplier ${supplierId}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get purchase invoices by date range
-     * GET /api/purchase-invoices/date-range
-     */
-    getInvoicesByDateRange: async (startDate, endDate, dateType = 'INVOICE_DATE', page = 0, size = 20) => {
-        try {
-            const response = await api.get('/purchase-invoices/date-range', {
-                params: { 
-                    startDate, 
-                    endDate, 
-                    dateType, 
-                    page, 
-                    size 
-                },
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching purchase invoices by date range:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get purchase invoices by payment status
-     * GET /api/purchase-invoices/payment-status/{status}
-     */
-    getInvoicesByPaymentStatus: async (status, page = 0, size = 20) => {
-        try {
-            const response = await api.get(`/purchase-invoices/payment-status/${status}`, {
-                params: { page, size },
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching purchase invoices with payment status ${status}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Make payment on invoice
-     * POST /api/purchase-invoices/{id}/payment
-     */
-    makePayment: async (id, amount) => {
-        try {
-            const response = await api.post(`/purchase-invoices/${id}/payment`, null, {
-                params: { amount }
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error making payment on invoice ${id}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Update purchase invoice
-     * PUT /api/purchase-invoices/{id}
-     */
-    updateInvoice: async (id, data) => {
-        try {
-            const response = await api.put(`/purchase-invoices/${id}`, data);
-            return response.data;
-        } catch (error) {
-            console.error(`Error updating purchase invoice with ID ${id}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Delete purchase invoice
-     * DELETE /api/purchase-invoices/{id}
-     */
-    deleteInvoice: async (id) => {
-        try {
-            const response = await api.delete(`/purchase-invoices/${id}`);
-            return response.data;
-        } catch (error) {
-            console.error(`Error deleting purchase invoice with ID ${id}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Search purchase invoices
-     * GET /api/purchase-invoices/search
-     */
-    searchInvoices: async (search, page = 0, size = 20) => {
-        try {
-            const response = await api.get('/purchase-invoices/search', {
-                params: { keyword: search, page, size },
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error searching purchase invoices with term "${search}":`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get purchase invoice summary
-     * GET /api/purchase-invoices/summary
-     */
-    getInvoiceSummary: async () => {
-        try {
-            const response = await api.get('/purchase-invoices/summary');
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching purchase invoice summary:', error);
-            throw error;
-        }
-    },
-
-    // ✅ FIXED: Remove the recursive deprecated method
-    // The getOrderByPoNumber method above is already correct
+  async exportToExcel(filters = {}) {
+    const { content } = await getPaged(col(INVOICES), { page: 0, size: 5000, search: filters.search || '' });
+    const headers = ['invoiceNo', 'purchaseDate', 'supplierName', 'poNumber', 'subtotal', 'discountTotal', 'taxTotal', 'grandTotal', 'amountPaid', 'balanceAmount'];
+    const csv = toCsv(content, headers);
+    downloadCsv(csv, `purchases-${nowISO().slice(0, 10)}.csv`);
+    return csv;
+  },
 };
+
+async function setOrderDoc(id, payload) {
+  const { setDoc, updateDoc } = await import('firebase/firestore');
+  if (payload.items || payload.poNumber) {
+    await setDoc(docOf(ORDERS, id), payload, { merge: true });
+  } else {
+    await updateDoc(docOf(ORDERS, id), payload);
+  }
+}
+
+async function getByDateRangeRaw(collectionName, dateField, startDate, endDate) {
+  const snap = await getDocs(col(collectionName));
+  const start = startDate ? String(startDate).slice(0, 10) : '';
+  const end = endDate ? String(endDate).slice(0, 10) : '';
+  const filtered = fromQuery(snap).filter((docData) => {
+    const key = docData[dateField] ? String(docData[dateField]).slice(0, 10) : '';
+    if (!key) return false;
+    if (start && key < start) return false;
+    if (end && key > end) return false;
+    return true;
+  });
+  return sortByCreatedDesc(filtered);
+}
+
+function pagedFromItems(items, page, size) {
+  const safePage = Number(page) || 0;
+  const safeSize = Number(size) || 20;
+  const content = slicePage(items, safePage, safeSize);
+  return {
+    content,
+    totalElements: items.length,
+    totalPages: Math.max(1, Math.ceil(items.length / safeSize)),
+    number: safePage,
+    size: safeSize,
+    numberOfElements: content.length,
+  };
+}
+
+async function deleteOrderDoc(id) {
+  const { deleteDoc } = await import('firebase/firestore');
+  await deleteDoc(docOf(ORDERS, id));
+}
+
+function toCsv(items, keys) {
+  const escape = (v) => {
+    if (v === null || v === undefined) return '';
+    return /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  };
+  return [keys.join(','), ...items.map((item) => keys.map((k) => escape(item[k])).join(','))].join('\n');
+}
+
+function downloadCsv(csv, filename) {
+  if (typeof window === 'undefined') return;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
 
 export default purchaseService;
