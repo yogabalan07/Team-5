@@ -41,11 +41,19 @@ const menuItems = [
     text: 'Customers',
     icon: <People />,
     path: '/customers',
+    subItems: [
+      { text: 'All Customers', path: '/customers' },
+      { text: 'Customer Groups', path: '/customers/groups' },
+    ],
   },
   {
     text: 'Suppliers',
     icon: <LocalShipping />,
     path: '/suppliers',
+    subItems: [
+      { text: 'All Suppliers', path: '/suppliers' },
+      { text: 'Supplier Groups', path: '/suppliers/groups' },
+    ],
   },
   {
     text: 'Items',
@@ -122,6 +130,8 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const location = useLocation();
   const { user, isAdmin } = useAuth();
   const [openSubMenus, setOpenSubMenus] = useState({
+    Customers: false,
+    Suppliers: false,
     Items: false,
     Sales: false,
     Purchases: false,

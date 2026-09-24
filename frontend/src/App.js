@@ -7,8 +7,10 @@ import Register from './components/auth/Register';
 import Dashboard from './components/dashboard/Dashboard';
 import CustomerList from './components/customers/CustomerList';
 import CustomerForm from './components/customers/CustomerForm';
+import CustomerGroupList from './components/customers/CustomerGroupList';
 import SupplierList from './components/suppliers/SupplierList';
 import SupplierForm from './components/suppliers/SupplierForm';
+import SupplierGroupList from './components/suppliers/SupplierGroupList';
 import ItemList from './components/items/ItemList';
 import ItemForm from './components/items/ItemForm';
 import BrandList from './components/items/BrandList';
@@ -83,11 +85,13 @@ function App() {
             <Route path="/customers" element={<CustomerList />} />
             <Route path="/customers/new" element={<CustomerForm />} />
             <Route path="/customers/edit/:id" element={<CustomerForm />} />
+            <Route path="/customers/groups" element={<CustomerGroupList />} />
             
             {/* ==================== SUPPLIER ROUTES ==================== */}
             <Route path="/suppliers" element={<SupplierList />} />
             <Route path="/suppliers/new" element={<SupplierForm />} />
             <Route path="/suppliers/edit/:id" element={<SupplierForm />} />
+            <Route path="/suppliers/groups" element={<SupplierGroupList />} />
             
             {/* ==================== ITEM ROUTES ==================== */}
             <Route path="/items" element={<ItemList />} />

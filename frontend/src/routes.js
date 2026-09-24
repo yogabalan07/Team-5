@@ -7,11 +7,13 @@ export const ROUTES = {
   CUSTOMERS: '/customers',
   CUSTOMER_NEW: '/customers/new',
   CUSTOMER_EDIT: '/customers/edit/:id',
+  CUSTOMER_GROUPS: '/customers/groups',
   
   // Suppliers
   SUPPLIERS: '/suppliers',
   SUPPLIER_NEW: '/suppliers/new',
   SUPPLIER_EDIT: '/suppliers/edit/:id',
+  SUPPLIER_GROUPS: '/suppliers/groups',
   
   // Items
   ITEMS: '/items',

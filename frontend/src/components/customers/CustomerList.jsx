@@ -17,342 +17,389 @@ import {
   Tooltip,
   TextField,
   InputAdornment,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
   LinearProgress,
-  Alert,
+  Grid,
+  Card,
+  CardContent,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Add,
   Search,
   Edit,
   Delete,
-  Phone,
-  Email,
-  Person,
-  Refresh,
+  People,
+  ReceiptLong,
+  FileDownload,
+  AccountBalanceWallet,
+  Warning,
+  Category as GroupIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { customerService } from '../../services/customerService';
+import { customerGroupService } from '../../services/customerGroupService';
+import PartyStatementDialog from '../common/PartyStatementDialog';
+import ConfirmDialog from '../common/ConfirmDialog';
 
 const CustomerList = () => {
   const navigate = useNavigate();
+
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalElements, setTotalElements] = useState(0);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [searchTimeout, setSearchTimeout] = useState(null);
-  const [error, setError] = useState('');
+
+  const [groups, setGroups] = useState([]);
+  const [groupFilter, setGroupFilter] = useState('ALL');
+
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    totalBalance: 0,
+    partiesWithDue: 0,
+  });
+
+  const [statementDialog, setStatementDialog] = useState({ open: false, customer: null });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, customer: null });
+
+  useEffect(() => {
+    fetchGroups();
+  }, []);
 
   useEffect(() => {
     fetchCustomers();
-  }, [page, rowsPerPage]);
+  }, [page, rowsPerPage, search, groupFilter]);
+
+  const fetchGroups = async () => {
+    try {
+      const data = await customerGroupService.getAll();
+      setGroups(data || []);
+    } catch (e) {
+      console.error('Failed to load groups:', e);
+    }
+  };
 
   const fetchCustomers = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError('');
-      console.log('🔄 Fetching customers...');
-      const data = await customerService.getAll(page, rowsPerPage, search);
-      setCustomers(data.content || []);
-      setTotalElements(data.totalElements || 0);
-      console.log('✅ Customers loaded:', data.content?.length || 0);
-    } catch (error) {
-      console.error('❌ Fetch error:', error);
-      setError('Failed to fetch customers');
-      toast.error('Failed to fetch customers');
+      const [statsData, pagedData] = await Promise.all([
+        customerService.getStats().catch(() => ({ total: 0, active: 0, totalBalance: 0, partiesWithDue: 0 })),
+        customerService.getAll(0, 500, search),
+      ]);
+      setStats(statsData);
+
+      let content = pagedData.content || [];
+      if (groupFilter !== 'ALL') {
+        content = content.filter((c) => c.groupId === groupFilter || c.groupName === groupFilter);
+      }
+
+      setTotalElements(content.length);
+      const start = page * rowsPerPage;
+      setCustomers(content.slice(start, start + rowsPerPage));
+    } catch (err) {
+      console.error('Fetch customers error:', err);
+      toast.error('Failed to load customers');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearch = (value) => {
-    setSearch(value);
-    setPage(0);
-    
-    if (searchTimeout) clearTimeout(searchTimeout);
-    const timeout = setTimeout(() => {
+  const handleExport = async () => {
+    try {
+      await customerService.exportToExcel({ search });
+      toast.success('Customer list exported');
+    } catch (e) {
+      toast.error('Export failed');
+    }
+  };
+
+  const handleDeleteClick = (customer) => {
+    setDeleteDialog({ open: true, customer });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog.customer) return;
+    try {
+      await customerService.delete(deleteDialog.customer.id);
+      toast.success(`Customer "${deleteDialog.customer.name}" removed`);
       fetchCustomers();
-    }, 500);
-    setSearchTimeout(timeout);
-  };
-
-  const handleDelete = async () => {
-    console.log('🔴 Delete button clicked!');
-    console.log('Selected customer:', selectedCustomer);
-    
-    if (!selectedCustomer || !selectedCustomer.id) {
-      console.error('❌ No customer selected!');
-      toast.error('No customer selected');
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      console.log(`🗑️ Attempting to delete customer ID: ${selectedCustomer.id}, Name: ${selectedCustomer.name}`);
-      
-      const response = await customerService.delete(selectedCustomer.id);
-      console.log('✅ Delete response:', response);
-      
-      toast.success(`Customer "${selectedCustomer.name}" deleted successfully`);
-      setDeleteDialogOpen(false);
-      setSelectedCustomer(null);
-      
-      // Refresh the list
-      console.log('🔄 Refreshing customer list...');
-      await fetchCustomers();
-      console.log('✅ List refreshed');
-      
-    } catch (error) {
-      console.error('❌ Delete error:', error);
-      console.error('Error response:', error.response);
-      console.error('Error data:', error.response?.data);
-      
-      const errorMsg = error.response?.data?.error || 
-                      error.response?.data?.message || 
-                      error.message ||
-                      'Failed to delete customer';
-      toast.error(errorMsg);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete customer');
     } finally {
-      setLoading(false);
-      console.log('🏁 Delete operation complete');
+      setDeleteDialog({ open: false, customer: null });
     }
   };
 
-  const openDeleteDialog = (customer) => {
-    console.log('🔴 Opening delete dialog for:', customer);
-    setSelectedCustomer(customer);
-    setDeleteDialogOpen(true);
-  };
-
-  const isNewItem = (createdAt) => {
-    if (!createdAt) return false;
-    const created = new Date(createdAt);
-    const now = new Date();
-    const diffHours = (now - created) / (1000 * 60 * 60);
-    return diffHours < 24;
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const formatCurrency = (amt) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(amt || 0);
 
   return (
     <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4" fontWeight="bold">
-            Customers
-          </Typography>
-          <Typography variant="body2" color="textSecondary">
-            Manage your customer database
-          </Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => navigate('/customers/new')}
-          sx={{ borderRadius: 2 }}
-        >
-          Add Customer
-        </Button>
-      </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
-
-      <Paper sx={{ p: 2, borderRadius: 2 }}>
-        <Box display="flex" gap={2} mb={2} flexWrap="wrap">
-          <TextField
-            placeholder="Search customers by name or phone..."
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ flexGrow: 1, minWidth: 200 }}
-            size="small"
-          />
-          <Button
-            variant="outlined"
-            startIcon={<Refresh />}
-            onClick={fetchCustomers}
-            size="medium"
-          >
-            Refresh
-          </Button>
-        </Box>
-
-        {loading ? (
-          <Box sx={{ width: '100%', py: 4 }}>
-            <LinearProgress />
-            <Typography textAlign="center" sx={{ mt: 2 }} color="textSecondary">
-              Loading customers...
+      {/* Header */}
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={1}>
+        <Box display="flex" alignItems="center" gap={1}>
+          <People sx={{ fontSize: 32, color: 'primary.main' }} />
+          <Box>
+            <Typography variant="h5" fontWeight="bold">
+              Customer Accounts & Receivables
+            </Typography>
+            <Typography variant="body2" color="textSecondary">
+              Manage client directory, credit limits, outstanding balances, and statements
             </Typography>
           </Box>
-        ) : (
-          <>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow sx={{ backgroundColor: '#f5f7fa' }}>
-                    <TableCell>#</TableCell>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Phone</TableCell>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Area</TableCell>
-                    <TableCell align="right">Credit Limit</TableCell>
-                    <TableCell>Created At</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="center">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {customers.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
-                        <Typography variant="body1" color="textSecondary">
-                          No customers found
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    customers.map((customer, index) => (
-                      <TableRow 
-                        key={customer.id} 
-                        hover
-                        className="table-row-hover"
-                      >
-                        <TableCell>{page * rowsPerPage + index + 1}</TableCell>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={1}>
-                            <Person sx={{ color: '#1976d2', fontSize: 20 }} />
-                            <Box>
-                              <Typography fontWeight={500}>{customer.name}</Typography>
-                              {isNewItem(customer.createdAt) && (
-                                <Chip 
-                                  label="NEW" 
-                                  color="primary" 
-                                  size="small" 
-                                  sx={{ ml: 1, height: 18, fontSize: '0.6rem' }}
-                                />
-                              )}
-                            </Box>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={1}>
-                            <Phone sx={{ fontSize: 16, color: 'text.secondary' }} />
-                            {customer.phone}
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={1}>
-                            <Email sx={{ fontSize: 16, color: 'text.secondary' }} />
-                            {customer.email || '-'}
-                          </Box>
-                        </TableCell>
-                        <TableCell>{customer.area || '-'}</TableCell>
-                        <TableCell align="right">₹{customer.creditLimit?.toFixed(2) || '0.00'}</TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontSize="0.75rem">
-                            {formatDate(customer.createdAt)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={customer.isActive ? 'Active' : 'Inactive'}
-                            color={customer.isActive ? 'success' : 'error'}
-                            size="small"
-                            sx={{ fontWeight: 500 }}
-                          />
-                        </TableCell>
-                        <TableCell align="center">
-                          <Tooltip title="Edit">
-                            <IconButton
-                              size="small"
-                              color="primary"
-                              onClick={() => navigate(`/customers/edit/${customer.id}`)}
-                            >
-                              <Edit />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => openDeleteDialog(customer)}
-                            >
-                              <Delete />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+        </Box>
+        <Box display="flex" gap={1} flexWrap="wrap">
+          <Button variant="outlined" startIcon={<GroupIcon />} onClick={() => navigate('/customers/groups')}>
+            Manage Groups
+          </Button>
+          <Button variant="outlined" startIcon={<FileDownload />} onClick={handleExport}>
+            Export CSV
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => navigate('/customers/new')}
+            sx={{ borderRadius: 2 }}
+          >
+            Add Customer
+          </Button>
+        </Box>
+      </Box>
 
-            <TablePagination
-              rowsPerPageOptions={[5, 10, 25, 50]}
-              component="div"
-              count={totalElements}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={(e, newPage) => setPage(newPage)}
-              onRowsPerPageChange={(e) => {
-                setRowsPerPage(parseInt(e.target.value, 10));
+      {/* KPI Cards */}
+      <Grid container spacing={2} mb={3}>
+        <Grid item xs={6} sm={3}>
+          <Card sx={{ bgcolor: '#e3f2fd', borderLeft: '4px solid #1976d2' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="caption" color="textSecondary" fontWeight="600">TOTAL CLIENTS</Typography>
+              <Typography variant="h5" fontWeight="bold" color="primary.main">{stats.total}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card sx={{ bgcolor: '#e8f5e9', borderLeft: '4px solid #2e7d32' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="caption" color="textSecondary" fontWeight="600">ACTIVE ACCOUNTS</Typography>
+              <Typography variant="h5" fontWeight="bold" color="success.main">{stats.active}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card sx={{ bgcolor: '#ffebee', borderLeft: '4px solid #d32f2f' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="caption" color="textSecondary" fontWeight="600">OUTSTANDING RECEIVABLES</Typography>
+              <Typography variant="h6" fontWeight="bold" color="error.main">{formatCurrency(stats.totalBalance)}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card sx={{ bgcolor: '#fff3e0', borderLeft: '4px solid #ed6c02' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="caption" color="textSecondary" fontWeight="600">CLIENTS WITH DUE</Typography>
+              <Typography variant="h5" fontWeight="bold" color="warning.main">{stats.partiesWithDue}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Search & Filter */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={8}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search by Customer Name, Phone, Contact Person, City, GSTIN, or Territory..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
                 setPage(0);
               }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search />
+                  </InputAdornment>
+                ),
+              }}
             />
-          </>
-        )}
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Customer Group</InputLabel>
+              <Select
+                value={groupFilter}
+                onChange={(e) => {
+                  setGroupFilter(e.target.value);
+                  setPage(0);
+                }}
+                label="Customer Group"
+              >
+                <MenuItem value="ALL">All Groups</MenuItem>
+                {groups.map((g) => (
+                  <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
       </Paper>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete Customer</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete customer "{selectedCustomer?.name}"?
-            This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={handleDelete} 
-            color="error" 
-            variant="contained"
-            startIcon={<Delete />}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+      {/* Table */}
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow sx={{ bgcolor: 'grey.100' }}>
+              <TableCell><strong>Customer Name</strong></TableCell>
+              <TableCell><strong>Contact / Phone</strong></TableCell>
+              <TableCell><strong>Group / Territory</strong></TableCell>
+              <TableCell><strong>GSTIN / PAN</strong></TableCell>
+              <TableCell align="right"><strong>Credit Limit (₹)</strong></TableCell>
+              <TableCell align="right"><strong>Receivable Due (₹)</strong></TableCell>
+              <TableCell align="center"><strong>Status</strong></TableCell>
+              <TableCell align="right"><strong>Actions</strong></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {customers.length > 0 ? (
+              customers.map((c) => {
+                const due = Number(c.creditBalance) || 0;
+                const hasDue = due > 0;
+                return (
+                  <TableRow key={c.id} hover>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight="700">
+                        {c.name}
+                      </Typography>
+                      {c.city && (
+                        <Typography variant="caption" color="textSecondary" display="block">
+                          {c.city}{c.state ? `, ${c.state}` : ''}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{c.phone || '-'}</Typography>
+                      {c.contactPerson && (
+                        <Typography variant="caption" color="textSecondary" display="block">
+                          Attn: {c.contactPerson}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={c.groupName || 'General'} size="small" variant="outlined" />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="caption" fontFamily="monospace">
+                        {c.gstNo || 'Unregistered'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography variant="body2">
+                        {c.creditLimit ? formatCurrency(c.creditLimit) : '-'}
+                      </Typography>
+                      {c.creditDays ? (
+                        <Typography variant="caption" color="textSecondary" display="block">
+                          {c.creditDays}d terms
+                        </Typography>
+                      ) : null}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography
+                        variant="body2"
+                        fontWeight="700"
+                        color={hasDue ? 'error.main' : 'success.main'}
+                      >
+                        {formatCurrency(due)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip
+                        label={c.isActive !== false ? 'Active' : 'Inactive'}
+                        size="small"
+                        color={c.isActive !== false ? 'success' : 'default'}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="View Account Statement & Ledger">
+                        <IconButton
+                          size="small"
+                          color="info"
+                          onClick={() => setStatementDialog({ open: true, customer: c })}
+                        >
+                          <ReceiptLong fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit Customer">
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={() => navigate(`/customers/edit/${c.id}`)}
+                        >
+                          <Edit fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete Customer">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleDeleteClick(c)}
+                        >
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            ) : (
+              <TableRow>
+                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                  <Typography color="textSecondary">
+                    {loading ? 'Loading customer accounts...' : 'No customers found'}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50]}
+          component="div"
+          count={totalElements}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={(e, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+        />
+      </TableContainer>
+
+      {/* Account Statement Dialog */}
+      <PartyStatementDialog
+        open={statementDialog.open}
+        onClose={() => setStatementDialog({ open: false, customer: null })}
+        party={statementDialog.customer}
+        service={customerService}
+        isCustomer={true}
+      />
+
+      {/* Delete Dialog */}
+      <ConfirmDialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, customer: null })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Customer"
+        message={`Are you sure you want to delete customer "${deleteDialog.customer?.name}"?`}
+      />
     </Box>
   );
 };

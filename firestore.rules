@@ -147,11 +147,21 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /customerGroups/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'BILLING_CLERK']);
+    }
+
     match /suppliers/{docId} {
       allow read: if isEnabled();
       allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']) ||
         (hasAny(['ACCOUNTS']) && changesOnly(['creditBalance']));
       allow delete: if isAdmin();
+    }
+
+    match /supplierGroups/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
     }
 
     match /itemBrands/{docId} {
