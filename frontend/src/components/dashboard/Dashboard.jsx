@@ -72,17 +72,28 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
+      const ops = [
+        ['customers.getAll(0,1)', () => customerService.getAll(0, 1)],
+        ['supplierService.getAll(0,1)', () => supplierService.getAll(0, 1)],
+        ['itemService.getAll(0,1)', () => itemService.getAll(0, 1)],
+        ['salesService.getStats()', () => salesService.getStats()],
+        ['purchaseService.getStats()', () => purchaseService.getStats()],
+        ['reportService.getStockSummary()', () => reportService.getStockSummary()],
+        ['salesService.getRecent()', () => salesService.getRecent()],
+        ['purchaseService.getRecent()', () => purchaseService.getRecent()],
+      ];
+      const settled = await Promise.allSettled(ops.map(([, run]) => run()));
+      const failures = settled
+        .map((result, i) => (result.status === 'rejected' ? { name: ops[i][0], error: result.reason } : null))
+        .filter(Boolean);
+      if (failures.length) {
+        failures.forEach(({ name, error }) => {
+          console.error(`Dashboard query failed: ${name}`, error && (error.code || error.message));
+        });
+        throw failures[0].error;
+      }
       const [customersPage, suppliersPage, itemsPage, salesStats, purchaseStats, stockSummary, recentSalesData, recentPurchasesData] =
-        await Promise.all([
-          customerService.getAll(0, 1),
-          supplierService.getAll(0, 1),
-          itemService.getAll(0, 1),
-          salesService.getStats(),
-          purchaseService.getStats(),
-          reportService.getStockSummary(),
-          salesService.getRecent(),
-          purchaseService.getRecent(),
-        ]);
+        settled.map((result) => result.value);
 
       const recentSalesFormatted = (recentSalesData || []).slice(0, 5).map((inv) => ({
         ...inv,

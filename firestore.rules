@@ -50,20 +50,49 @@ service cloud.firestore {
     // bootstrap — first-admin gate.
     //
     // On a fresh system NO account can create an ADMIN profile unless it first
-    // secures bootstrap/lock. The app does this atomically on the very first
-    // registration (transaction): it wins bootstrap/lock and creates the
-    // matching ADMIN profile. Every later registration sees the lock and is
-    // forced to STAFF. Firestore transactions are serialized server-side, so
-    // two concurrent first registrations cannot both become admins.
-    // Once the lock exists, admin rights can only be granted by an ADMIN.
+    // secures bootstrap/lock. The app claims the lock first (its own commit)
+    // and then creates the matching ADMIN profile in a second commit, so the
+    // profile create below can actually get() the committed lock — security
+    // rules evaluate get()/exists() against COMMITTED state and cannot see
+    // writes that are part of the same transaction. Every later registration
+    // sees the lock and is forced to STAFF. A claim can only be made by an
+    // account that does not have a profile yet, and only that same account
+    // can release a claim that never got a profile (e.g. after a failed
+    // registration). Once a profile exists the lock is permanent, and admin
+    // rights can only be granted by an ADMIN.
     // ------------------------------------------------------------------
     match /bootstrap/{docId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() &&
         docId == 'lock' &&
         request.resource.data.adminUid == request.auth.uid &&
-        !exists(/databases/$(database)/documents/bootstrap/lock);
-      allow update, delete: if false;
+        !exists(/databases/$(database)/documents/bootstrap/lock) &&
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      allow update: if false;
+      allow delete: if isSignedIn() &&
+        docId == 'lock' &&
+        resource.data.adminUid == request.auth.uid &&
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // ------------------------------------------------------------------
+    // usernames — one reservation doc per account so self-registration keeps
+    // the unique-username guarantee WITHOUT a pre-auth query over `users`
+    // (the users rules rightly forbid unauthenticated access, which is what
+    // broke registration). Written in the same transaction that claims the
+    // bootstrap lock; readable only by signed-in users; each doc belongs to
+    // the uid that reserved it.
+    // ------------------------------------------------------------------
+    match /usernames/{uname} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.usernameLower == uname;
+      allow update: if false;
+      allow delete: if isAdmin() ||
+        (isSignedIn() &&
+          resource.data.uid == request.auth.uid &&
+          !exists(/databases/$(database)/documents/users/$(request.auth.uid)));
     }
 
     // ------------------------------------------------------------------
@@ -79,7 +108,7 @@ service cloud.firestore {
     //     deletion requires the Admin SDK which is unavailable on Spark).
     // ------------------------------------------------------------------
     match /users/{userId} {
-      allow read: if isEnabled() && (request.auth.uid == userId || isAdmin());
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
       allow create: if isSignedIn() &&
         request.auth.uid == userId &&
         request.resource.data.uid == request.auth.uid &&

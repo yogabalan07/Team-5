@@ -22,6 +22,10 @@ Thumbs.db
 .firebase/
 *.cache
 firebase-debug.log
+firestore-debug.log
+emu-*.log
+emu-pid.txt
+scripts-rulecheck/
 
 # OS artifacts
 *.msi

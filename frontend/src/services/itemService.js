@@ -40,8 +40,10 @@ async function resolveMaster(service, id, fallbackName) {
 function withStockInfo(payload) {
   const currentStock = Number(payload.currentStock) || 0;
   const minStock = Number(payload.minStock) || 0;
-  const stock = classifyStock(currentStock, minStock);
-  return { ...payload, currentStock, minStock, isLowStock: stock.isLowStock, isOutOfStock: stock.isOutOfStock };
+  const status = classifyStock(currentStock, minStock);
+  const isOutOfStock = status === 'OUT_OF_STOCK';
+  const isLowStock = status === 'LOW' || status === 'CRITICAL' || isOutOfStock;
+  return { ...payload, currentStock, minStock, isLowStock, isOutOfStock };
 }
 
 async function assertUniqueCode(itemCode, excludeId = null) {

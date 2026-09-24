@@ -41,7 +41,20 @@ export const AuthProvider = ({ children }) => {
         try {
           profile = await authService.loadProfile(firebaseUser.uid);
         } catch (e) {
-          // profile may lag right after first sign-in
+          // The profile read is denied only when the profile document is
+          // missing (interrupted registration) or blocked (isActive != true).
+          // Repair the former so dashboard/business reads stop failing with
+          // "Missing or insufficient permissions"; report the latter by
+          // signing the user out.
+          try {
+            profile = await authService.ensureProfile(firebaseUser);
+          } catch (ensureErr) {
+            if (!cancelled) {
+              authService.logout();
+              finish(null);
+            }
+            return;
+          }
         }
         if (cancelled) return;
         const userData = authService.buildUserObject({
