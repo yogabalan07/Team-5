@@ -1,6 +1,8 @@
 // src/services/itemService.js
-// Firestore-backed item master. Denormalised master names are written on the
-// item so grids and invoices never need joins.
+// Enterprise Firestore-backed product & master catalog service.
+// Supports Barcodes, Categories, Brands, Groups, Units, Taxes, Price Lists,
+// Multi-Tier Pricing (Retail, Wholesale, Special), Batch Numbers, Serial Numbers,
+// Expiry Dates, Reorder Levels, and Product Images.
 
 import { getDocs, addDoc, setDoc, deleteDoc, orderBy, limit, query, where } from '@firebase/firestore';
 import {
@@ -24,8 +26,22 @@ import { groupService } from './groupService';
 import { sectionService } from './sectionService';
 import { unitService } from './unitService';
 import { taxService } from './taxService';
+import { categoryService } from './categoryService';
+import { supplierService } from './supplierService';
 
 const ITEMS = 'items';
+
+export function generateBarcode(prefix = '890') {
+  // Generates a 13-digit EAN-13 format barcode
+  const randomDigits = Math.floor(100000000 + Math.random() * 900000000);
+  const code12 = `${prefix}${randomDigits}`;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(code12[i], 10) * (i % 2 === 0 ? 1 : 3);
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return `${code12}${checkDigit}`;
+}
 
 async function resolveMaster(service, id, fallbackName) {
   if (!id) return { id: null, name: fallbackName || '' };
@@ -39,11 +55,23 @@ async function resolveMaster(service, id, fallbackName) {
 
 function withStockInfo(payload) {
   const currentStock = Number(payload.currentStock) || 0;
-  const minStock = Number(payload.minStock) || 0;
-  const status = classifyStock(currentStock, minStock);
+  const minStock = Number(payload.minStock !== undefined ? payload.minStock : payload.minimumStock) || 0;
+  const maxStock = Number(payload.maxStock !== undefined ? payload.maxStock : payload.maximumStock) || 0;
+  const status = classifyStock(currentStock, minStock, maxStock);
   const isOutOfStock = status === 'OUT_OF_STOCK';
   const isLowStock = status === 'LOW' || status === 'CRITICAL' || isOutOfStock;
-  return { ...payload, currentStock, minStock, isLowStock, isOutOfStock };
+  return {
+    ...payload,
+    currentStock,
+    minStock,
+    minimumStock: minStock,
+    maxStock,
+    maximumStock: maxStock,
+    reorderLevel: Number(payload.reorderLevel) || minStock,
+    isLowStock,
+    isOutOfStock,
+    stockStatus: status,
+  };
 }
 
 async function assertUniqueCode(itemCode, excludeId = null) {
@@ -51,7 +79,16 @@ async function assertUniqueCode(itemCode, excludeId = null) {
   const snap = await getDocs(query(col(ITEMS), where('itemCode', '==', itemCode)));
   const conflict = fromQuery(snap).find((item) => item.id !== excludeId);
   if (conflict) {
-    throw serviceError(`Item code already exists: ${itemCode}`, 400);
+    throw serviceError(`Product SKU / Code already exists: ${itemCode}`, 400);
+  }
+}
+
+async function assertUniqueBarcode(barcode, excludeId = null) {
+  if (!barcode || String(barcode).trim() === '') return;
+  const snap = await getDocs(query(col(ITEMS), where('barcode', '==', String(barcode).trim())));
+  const conflict = fromQuery(snap).find((item) => item.id !== excludeId);
+  if (conflict) {
+    throw serviceError(`Barcode already assigned to product "${conflict.name}": ${barcode}`, 400);
   }
 }
 
@@ -78,7 +115,15 @@ export const itemService = {
   async getByCode(itemCode) {
     const snap = await getDocs(query(col(ITEMS), where('itemCode', '==', itemCode), limit(1)));
     const items = fromQuery(snap);
-    if (!items.length) throw serviceError(`Item with code ${itemCode} not found`, 404);
+    if (!items.length) throw serviceError(`Product with code ${itemCode} not found`, 404);
+    return items[0];
+  },
+
+  async getByBarcode(barcode) {
+    if (!barcode) throw serviceError('Barcode required', 400);
+    const snap = await getDocs(query(col(ITEMS), where('barcode', '==', String(barcode).trim()), limit(1)));
+    const items = fromQuery(snap);
+    if (!items.length) throw serviceError(`Product with barcode ${barcode} not found`, 404);
     return items[0];
   },
 
@@ -86,14 +131,31 @@ export const itemService = {
     requireAuth();
     const brand = await resolveMaster(brandService, data.brandId, data.brandName);
     const group = await resolveMaster(groupService, data.groupId, data.groupName);
+    const category = await resolveMaster(categoryService, data.categoryId, data.categoryName);
     const section = await resolveMaster(sectionService, data.sectionId, data.sectionName);
     const unit = await resolveMaster(unitService, data.unitId, data.unitName);
     const tax = await resolveMaster(taxService, data.taxId || data.taxRateId, data.taxName);
+    const supplier = await resolveMaster(supplierService, data.supplierId, data.supplierName);
+
+    const barcode = data.barcode ? String(data.barcode).trim() : '';
+    const itemCode = String(data.itemCode || data.sku || '').trim();
+    if (!itemCode) throw serviceError('Product SKU / Code is required', 400);
+    if (!data.name || String(data.name).trim() === '') throw serviceError('Product Name is required', 400);
+
+    const rawSerials = Array.isArray(data.serialNumbers)
+      ? data.serialNumbers
+      : typeof data.serialNumbers === 'string'
+      ? data.serialNumbers.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
 
     const payload = withStockInfo({
-      itemCode: data.itemCode,
-      name: data.name,
-      categoryName: data.categoryName || (group.name || brand.name || ''),
+      productId: itemCode,
+      itemCode,
+      sku: itemCode,
+      barcode,
+      name: String(data.name).trim(),
+      categoryId: category.id,
+      categoryName: category.name || (group.name || brand.name || ''),
       brandId: brand.id,
       brandName: brand.name || '',
       groupId: group.id,
@@ -102,27 +164,53 @@ export const itemService = {
       sectionName: section.name || '',
       unitId: unit.id,
       unitName: unit.name || '',
+      supplierId: supplier.id,
+      supplierName: supplier.name || '',
       purchasePrice: round2(Number(data.purchasePrice) || 0),
       sellingPrice: round2(Number(data.sellingPrice) || 0),
+      mrp: round2(Number(data.mrp !== undefined ? data.mrp : data.sellingPrice) || 0),
+      wholesalePrice: round2(Number(data.wholesalePrice !== undefined ? data.wholesalePrice : data.sellingPrice) || 0),
+      specialPrice: round2(Number(data.specialPrice !== undefined ? data.specialPrice : data.sellingPrice) || 0),
       gstRate: round2(Number(data.gstRate !== undefined ? data.gstRate : 0)),
+      taxRate: round2(Number(data.gstRate !== undefined ? data.gstRate : 0)),
       taxId: tax.id,
       taxName: tax.name || '',
-      minStock: Number(data.minStock) || 0,
+      minStock: Number(data.minStock !== undefined ? data.minStock : data.minimumStock) || 0,
+      minimumStock: Number(data.minStock !== undefined ? data.minStock : data.minimumStock) || 0,
+      maxStock: Number(data.maxStock !== undefined ? data.maxStock : data.maximumStock) || 0,
+      maximumStock: Number(data.maxStock !== undefined ? data.maxStock : data.maximumStock) || 0,
+      reorderLevel: Number(data.reorderLevel) || Number(data.minStock) || 0,
+      batchNumber: data.batchNumber ? String(data.batchNumber).trim() : '',
+      manufacturingDate: data.manufacturingDate || '',
+      expiryDate: data.expiryDate || '',
+      serialNumbers: rawSerials,
+      imageUrl: data.imageUrl || data.image || '',
       description: data.description || '',
       currentStock: Number(data.currentStock) || 0,
+      status: data.status || (data.isActive === false ? 'INACTIVE' : 'ACTIVE'),
       isActive: data.isActive === undefined ? true : Boolean(data.isActive),
       createdAt: nowISO(),
       updatedAt: nowISO(),
     });
+
     payload.searchText = buildSearchText(
       payload.itemCode,
+      payload.barcode,
       payload.name,
+      payload.categoryName,
       payload.brandName,
       payload.groupName,
       payload.unitName,
-      payload.sectionName
+      payload.sectionName,
+      payload.batchNumber,
+      payload.supplierName
     );
+
     await assertUniqueCode(payload.itemCode);
+    if (payload.barcode) {
+      await assertUniqueBarcode(payload.barcode);
+    }
+
     const ref = await addDoc(col(ITEMS), payload);
     return { ...payload, id: ref.id };
   },
@@ -132,43 +220,86 @@ export const itemService = {
     const existing = await getByIdOr404(col(ITEMS), id);
     const brand = await resolveMaster(brandService, data.brandId !== undefined ? data.brandId : existing.brandId, data.brandName);
     const group = await resolveMaster(groupService, data.groupId !== undefined ? data.groupId : existing.groupId, data.groupName);
+    const category = await resolveMaster(categoryService, data.categoryId !== undefined ? data.categoryId : existing.categoryId, data.categoryName);
     const section = await resolveMaster(sectionService, data.sectionId !== undefined ? data.sectionId : existing.sectionId, data.sectionName);
     const unit = await resolveMaster(unitService, data.unitId !== undefined ? data.unitId : existing.unitId, data.unitName);
     const tax = await resolveMaster(taxService, data.taxId !== undefined ? data.taxId : existing.taxId, data.taxName);
+    const supplier = await resolveMaster(supplierService, data.supplierId !== undefined ? data.supplierId : existing.supplierId, data.supplierName);
+
+    const barcode = data.barcode !== undefined ? String(data.barcode).trim() : existing.barcode || '';
+    const itemCode = String(data.itemCode !== undefined ? data.itemCode : existing.itemCode || existing.sku || '').trim();
+
+    const rawSerials = data.serialNumbers !== undefined
+      ? Array.isArray(data.serialNumbers)
+        ? data.serialNumbers
+        : typeof data.serialNumbers === 'string'
+        ? data.serialNumbers.split(',').map((s) => s.trim()).filter(Boolean)
+        : []
+      : existing.serialNumbers || [];
 
     const next = withStockInfo({
       ...existing,
-      itemCode: data.itemCode !== undefined ? data.itemCode : existing.itemCode,
-      name: data.name !== undefined ? data.name : existing.name,
-      categoryName: data.categoryName !== undefined ? data.categoryName : existing.categoryName,
+      productId: itemCode,
+      itemCode,
+      sku: itemCode,
+      barcode,
+      name: data.name !== undefined ? String(data.name).trim() : existing.name,
+      categoryId: category.id,
+      categoryName: category.name || existing.categoryName || '',
       brandId: brand.id,
-      brandName: brand.name || existing.brandName,
+      brandName: brand.name || existing.brandName || '',
       groupId: group.id,
-      groupName: group.name || existing.groupName,
+      groupName: group.name || existing.groupName || '',
       sectionId: section.id,
       sectionName: section.name || existing.sectionName || '',
       unitId: unit.id,
       unitName: unit.name || existing.unitName || '',
+      supplierId: supplier.id,
+      supplierName: supplier.name || existing.supplierName || '',
       purchasePrice: round2(Number(data.purchasePrice !== undefined ? data.purchasePrice : existing.purchasePrice) || 0),
       sellingPrice: round2(Number(data.sellingPrice !== undefined ? data.sellingPrice : existing.sellingPrice) || 0),
+      mrp: round2(Number(data.mrp !== undefined ? data.mrp : existing.mrp !== undefined ? existing.mrp : existing.sellingPrice) || 0),
+      wholesalePrice: round2(Number(data.wholesalePrice !== undefined ? data.wholesalePrice : existing.wholesalePrice !== undefined ? existing.wholesalePrice : existing.sellingPrice) || 0),
+      specialPrice: round2(Number(data.specialPrice !== undefined ? data.specialPrice : existing.specialPrice !== undefined ? existing.specialPrice : existing.sellingPrice) || 0),
       gstRate: round2(Number(data.gstRate !== undefined ? data.gstRate : existing.gstRate) || 0),
+      taxRate: round2(Number(data.gstRate !== undefined ? data.gstRate : existing.gstRate) || 0),
       taxId: tax.id,
       taxName: tax.name || existing.taxName || '',
       minStock: Number(data.minStock !== undefined ? data.minStock : existing.minStock) || 0,
+      minimumStock: Number(data.minStock !== undefined ? data.minStock : existing.minStock) || 0,
+      maxStock: Number(data.maxStock !== undefined ? data.maxStock : existing.maxStock || 0) || 0,
+      maximumStock: Number(data.maxStock !== undefined ? data.maxStock : existing.maxStock || 0) || 0,
+      reorderLevel: Number(data.reorderLevel !== undefined ? data.reorderLevel : existing.reorderLevel || existing.minStock || 0),
+      batchNumber: data.batchNumber !== undefined ? String(data.batchNumber).trim() : existing.batchNumber || '',
+      manufacturingDate: data.manufacturingDate !== undefined ? data.manufacturingDate : existing.manufacturingDate || '',
+      expiryDate: data.expiryDate !== undefined ? data.expiryDate : existing.expiryDate || '',
+      serialNumbers: rawSerials,
+      imageUrl: data.imageUrl !== undefined ? data.imageUrl : data.image !== undefined ? data.image : existing.imageUrl || '',
       description: data.description !== undefined ? data.description : existing.description || '',
+      status: data.status || (data.isActive === false ? 'INACTIVE' : existing.status || 'ACTIVE'),
       isActive: data.isActive !== undefined ? Boolean(data.isActive) : existing.isActive !== false,
       updatedAt: nowISO(),
     });
+
     delete next.id;
     next.searchText = buildSearchText(
       next.itemCode,
+      next.barcode,
       next.name,
+      next.categoryName,
       next.brandName,
       next.groupName,
       next.unitName,
-      next.sectionName
+      next.sectionName,
+      next.batchNumber,
+      next.supplierName
     );
+
     await assertUniqueCode(next.itemCode, id);
+    if (next.barcode) {
+      await assertUniqueBarcode(next.barcode, id);
+    }
+
     await setDoc(docOf(ITEMS, id), next, { merge: true });
     return { ...next, id };
   },
@@ -209,10 +340,17 @@ export const itemService = {
     let stockValue = 0;
     let lowStock = 0;
     let outOfStock = 0;
+    let expiringSoon = 0;
+    const today = nowISO().slice(0, 10);
+    const next30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
     for (const item of items) {
-      const stock = classifyStock(Number(item.currentStock) || 0, Number(item.minStock) || 0);
-      if (stock.isLowStock) lowStock += 1;
-      if (stock.isOutOfStock) outOfStock += 1;
+      const stock = classifyStock(Number(item.currentStock) || 0, Number(item.minStock) || 0, Number(item.maxStock) || 0);
+      if (stock === 'LOW' || stock === 'CRITICAL') lowStock += 1;
+      if (stock === 'OUT_OF_STOCK') outOfStock += 1;
+      if (item.expiryDate && item.expiryDate >= today && item.expiryDate <= next30Days) {
+        expiringSoon += 1;
+      }
       stockValue += (Number(item.currentStock) || 0) * (Number(item.purchasePrice) || Number(item.sellingPrice) || 0);
     }
     return {
@@ -220,6 +358,7 @@ export const itemService = {
       stockValue: round2(stockValue),
       lowStockCount: lowStock,
       outOfStockCount: outOfStock,
+      expiringSoonCount: expiringSoon,
     };
   },
 
@@ -228,11 +367,38 @@ export const itemService = {
     return fromQuery(snap);
   },
 
+  async getExpiringItems(days = 30) {
+    const all = fromQuery(await getDocs(col(ITEMS)));
+    const today = nowISO().slice(0, 10);
+    const targetDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    return all.filter((item) => item.expiryDate && item.expiryDate >= today && item.expiryDate <= targetDate);
+  },
+
   async exportToExcel(filters = {}) {
     const { items } = await fetchDocs(col(ITEMS), { search: filters.search || '' });
-    const headers = ['itemCode', 'name', 'brandName', 'groupName', 'unitName', 'purchasePrice', 'sellingPrice', 'gstRate', 'currentStock', 'minStock'];
+    const headers = [
+      'itemCode',
+      'barcode',
+      'name',
+      'categoryName',
+      'brandName',
+      'groupName',
+      'unitName',
+      'purchasePrice',
+      'sellingPrice',
+      'wholesalePrice',
+      'mrp',
+      'gstRate',
+      'currentStock',
+      'minStock',
+      'maxStock',
+      'reorderLevel',
+      'batchNumber',
+      'expiryDate',
+      'status',
+    ];
     const csv = toCsv(items, headers);
-    downloadCsv(csv, `items-${nowISO().slice(0, 10)}.csv`);
+    downloadCsv(csv, `products-${nowISO().slice(0, 10)}.csv`);
     return csv;
   },
 
@@ -259,7 +425,7 @@ function getPagedFromItems(items, page, size) {
   return {
     content,
     totalElements: items.length,
-    totalPages: Math.ceil(items.length / safeSize),
+    totalPages: Math.ceil(items.length / safeSize) || 1,
     number: safePage,
     size: safeSize,
     numberOfElements: content.length,

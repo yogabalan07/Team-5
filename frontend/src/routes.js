@@ -17,10 +17,12 @@ export const ROUTES = {
   ITEMS: '/items',
   ITEM_NEW: '/items/new',
   ITEM_EDIT: '/items/edit/:id',
+  ITEM_CATEGORIES: '/items/categories',
   ITEM_BRANDS: '/items/brands',
   ITEM_GROUPS: '/items/groups',
   ITEM_UNITS: '/items/units',
   ITEM_TAXES: '/items/taxes',
+  ITEM_PRICELISTS: '/items/price-lists',
   
   // Sales
   SALES_ENTRY: '/sales/entry',

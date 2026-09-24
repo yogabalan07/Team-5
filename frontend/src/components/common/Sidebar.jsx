@@ -53,11 +53,13 @@ const menuItems = [
     path: '/items',
     subItems: [
       { text: 'All Items', path: '/items' },
+      { text: 'Categories', path: '/items/categories' },
       { text: 'Brands', path: '/items/brands' },
       { text: 'Groups', path: '/items/groups' },
       { text: 'Sections', path: '/items/sections' },
       { text: 'Units', path: '/items/units' },
       { text: 'Taxes', path: '/items/taxes' },
+      { text: 'Price Lists', path: '/items/price-lists' },
     ],
   },
   {

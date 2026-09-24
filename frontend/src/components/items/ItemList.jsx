@@ -20,13 +20,18 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogContentText,
   DialogActions,
   LinearProgress,
   Tabs,
   Tab,
-  Alert,
-  LinearProgress as MuiLinearProgress,
+  Grid,
+  Card,
+  CardContent,
+  Avatar,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Add,
@@ -37,537 +42,545 @@ import {
   Refresh,
   Warning,
   CheckCircle,
-  Category,
+  Category as CategoryIcon,
   LocalOffer,
   Straighten,
-  Visibility,
+  QrCode,
+  FileDownload,
+  Sell,
+  Schedule,
+  ContentCopy,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { itemService } from '../../services/itemService';
+import { categoryService } from '../../services/categoryService';
+import { brandService } from '../../services/brandService';
+import ConfirmDialog from '../common/ConfirmDialog';
 
 const ItemList = () => {
   const navigate = useNavigate();
   const location = useLocation();
+
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalElements, setTotalElements] = useState(0);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
   const [tabValue, setTabValue] = useState(0);
-  const [error, setError] = useState('');
-  const [searchTimeout, setSearchTimeout] = useState(null);
-  const [lowStockItems, setLowStockItems] = useState([]);
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [brandFilter, setBrandFilter] = useState('ALL');
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
 
-  // Check URL parameters on mount and when URL changes
+  const [stats, setStats] = useState({
+    totalItems: 0,
+    stockValue: 0,
+    lowStockCount: 0,
+    outOfStockCount: 0,
+    expiringSoonCount: 0,
+  });
+
+  const [barcodeDialog, setBarcodeDialog] = useState({ open: false, item: null });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
+
+  useEffect(() => {
+    fetchFilterMasters();
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
-    const filterParam = params.get('filter');
-    
-    console.log('📋 URL Params - tab:', tabParam, 'filter:', filterParam);
-    
-    if (tabParam === 'low-stock' || filterParam === 'low-stock') {
+    if (tabParam === 'low-stock') {
       setTabValue(1);
-      // Fetch low stock items after setting tab
-      setTimeout(() => fetchLowStockItems(), 100);
+    } else if (tabParam === 'out-of-stock') {
+      setTabValue(2);
+    } else if (tabParam === 'expiring') {
+      setTabValue(3);
     } else {
       setTabValue(0);
-      fetchItems();
     }
   }, [location.search]);
 
   useEffect(() => {
-    // Only fetch if not triggered by URL change
-    if (tabValue === 0 && !location.search.includes('low-stock')) {
-      fetchItems();
-    }
-  }, [page, rowsPerPage]);
+    fetchData();
+  }, [page, rowsPerPage, search, tabValue, categoryFilter, brandFilter]);
 
-  const fetchItems = async () => {
+  const fetchFilterMasters = async () => {
     try {
-      setLoading(true);
-      setError('');
-      const data = await itemService.getAll(page, rowsPerPage, search);
-      setItems(data.content || []);
-      setTotalElements(data.totalElements || 0);
-      console.log('📦 Items loaded:', data.content?.length || 0);
-    } catch (error) {
-      console.error('❌ Fetch error:', error);
-      setError('Failed to fetch items');
-      toast.error('Failed to fetch items');
-    } finally {
-      setLoading(false);
+      const [cats, brs] = await Promise.all([
+        categoryService.getAll().catch(() => []),
+        brandService.getAll().catch(() => []),
+      ]);
+      setCategories(cats || []);
+      setBrands(brs || []);
+    } catch (e) {
+      // best effort
     }
   };
 
-  const fetchLowStockItems = async () => {
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError('');
-      console.log('🔍 Fetching low stock and out of stock items...');
-      
-      // Fetch all items
-      const allItems = await itemService.getAll(0, 1000);
-      const itemsArray = allItems.content || [];
-      
-      console.log('📦 Total items:', itemsArray.length);
-      
-      // Filter: Low Stock AND Out of Stock
-      const lowAndOutOfStock = itemsArray.filter(item => {
-        const currentStock = item.currentStock || 0;
-        const reorderLevel = item.reorderLevel || 0;
-        const minStockLevel = item.minStockLevel || 0;
-        
-        return currentStock <= 0 || 
-               (reorderLevel > 0 && currentStock <= reorderLevel) || 
-               (minStockLevel > 0 && currentStock <= minStockLevel);
-      });
-      
-      console.log('📦 Low/Out of Stock items:', lowAndOutOfStock.length);
-      
-      setLowStockItems(lowAndOutOfStock);
-      setItems(lowAndOutOfStock);
-      setTotalElements(lowAndOutOfStock.length);
-      
-      if (lowAndOutOfStock.length === 0) {
-        console.log('ℹ️ No low stock or out of stock items found');
+      const [statsData, pagedData] = await Promise.all([
+        itemService.getStats().catch(() => ({ totalItems: 0, stockValue: 0, lowStockCount: 0, outOfStockCount: 0, expiringSoonCount: 0 })),
+        itemService.getAll(0, 500, search),
+      ]);
+      setStats(statsData);
+
+      let allContent = pagedData.content || [];
+
+      // Filter by category
+      if (categoryFilter !== 'ALL') {
+        allContent = allContent.filter((i) => i.categoryId === categoryFilter || i.categoryName === categoryFilter);
       }
-    } catch (error) {
-      console.error('❌ Error fetching low stock items:', error);
-      setError('Failed to fetch low stock items');
-      toast.error('Failed to fetch low stock items');
-      setLowStockItems([]);
-      setItems([]);
-      setTotalElements(0);
-    } finally {
-      setLoading(false);
-    }
-  };
+      // Filter by brand
+      if (brandFilter !== 'ALL') {
+        allContent = allContent.filter((i) => i.brandId === brandFilter || i.brandName === brandFilter);
+      }
 
-  const handleSearch = (value) => {
-    setSearch(value);
-    setPage(0);
-    
-    if (searchTimeout) clearTimeout(searchTimeout);
-    const timeout = setTimeout(() => {
+      // Filter by tab
       if (tabValue === 1) {
-        const filtered = lowStockItems.filter(item => 
-          item.name?.toLowerCase().includes(value.toLowerCase()) ||
-          item.code?.toLowerCase().includes(value.toLowerCase())
-        );
-        setItems(filtered);
-        setTotalElements(filtered.length);
-      } else {
-        fetchItems();
+        // Low Stock
+        allContent = allContent.filter((i) => {
+          const cur = Number(i.currentStock) || 0;
+          const min = Number(i.minStock || i.minimumStock) || 0;
+          return cur > 0 && min > 0 && cur <= min * 2;
+        });
+      } else if (tabValue === 2) {
+        // Out of Stock
+        allContent = allContent.filter((i) => (Number(i.currentStock) || 0) <= 0);
+      } else if (tabValue === 3) {
+        // Expiring Soon
+        const today = new Date().toISOString().slice(0, 10);
+        const next30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        allContent = allContent.filter((i) => i.expiryDate && i.expiryDate >= today && i.expiryDate <= next30);
       }
-    }, 500);
-    setSearchTimeout(timeout);
-  };
 
-  const handleDelete = async () => {
-    try {
-      setLoading(true);
-      await itemService.delete(selectedItem.id);
-      toast.success(`Item "${selectedItem.name}" deleted successfully`);
-      setDeleteDialogOpen(false);
-      setSelectedItem(null);
-      if (tabValue === 1) {
-        await fetchLowStockItems();
-      } else {
-        await fetchItems();
-      }
-    } catch (error) {
-      console.error('Delete error:', error);
-      toast.error(error.response?.data?.error || 'Failed to delete item');
+      setTotalElements(allContent.length);
+      const start = page * rowsPerPage;
+      setItems(allContent.slice(start, start + rowsPerPage));
+    } catch (err) {
+      console.error('Fetch items error:', err);
+      toast.error('Failed to load products');
     } finally {
       setLoading(false);
     }
   };
 
-  const openDeleteDialog = (item) => {
-    setSelectedItem(item);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleTabChange = (event, newValue) => {
-    setTabValue(newValue);
-    setPage(0);
-    setSearch('');
-    setError('');
-    
-    // Update URL when tab changes
-    if (newValue === 1) {
-      navigate('/items?tab=low-stock', { replace: true });
-      fetchLowStockItems();
-    } else {
-      navigate('/items', { replace: true });
-      fetchItems();
+  const handleExport = async () => {
+    try {
+      await itemService.exportToExcel({ search });
+      toast.success('Product catalog exported successfully');
+    } catch (e) {
+      toast.error('Export failed');
     }
   };
 
-  const getStockStatus = (item) => {
-    const currentStock = item.currentStock || 0;
-    const minStock = item.minStockLevel || 0;
-    const reorderLevel = item.reorderLevel || 0;
-    
-    if (currentStock <= 0) {
-      return { label: 'Out of Stock', color: 'error', icon: <Warning sx={{ fontSize: 16 }} /> };
+  const handleDeleteClick = (item) => {
+    setDeleteDialog({ open: true, item });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog.item) return;
+    try {
+      await itemService.delete(deleteDialog.item.id);
+      toast.success('Product deleted successfully');
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete product');
+    } finally {
+      setDeleteDialog({ open: false, item: null });
     }
-    if (reorderLevel > 0 && currentStock <= reorderLevel) {
-      return { label: 'Low Stock', color: 'warning', icon: <Warning sx={{ fontSize: 16 }} /> };
-    }
-    if (minStock > 0 && currentStock <= minStock) {
-      return { label: 'Critical', color: 'warning', icon: <Warning sx={{ fontSize: 16 }} /> };
-    }
-    return { label: 'In Stock', color: 'success', icon: <CheckCircle sx={{ fontSize: 16 }} /> };
   };
 
-  const getStockLevelColor = (currentStock, minLevel, maxLevel) => {
-    if (!maxLevel || maxLevel === 0) {
-      if (currentStock <= 0) return 'error';
-      if (currentStock <= (minLevel || 5)) return 'warning';
-      return 'success';
-    }
-    const percentage = (currentStock / maxLevel) * 100;
-    if (percentage <= 25) return 'error';
-    if (percentage <= 50) return 'warning';
-    return 'success';
+  const copyToClipboard = (text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    toast.info(`Copied to clipboard: ${text}`);
   };
 
-  const isNewItem = (createdAt) => {
-    if (!createdAt) return false;
-    const created = new Date(createdAt);
-    const now = new Date();
-    const diffHours = (now - created) / (1000 * 60 * 60);
-    return diffHours < 24;
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const formatCurrency = (amount) => {
-    if (!amount) return '₹0.00';
-    return `₹${amount.toFixed(2)}`;
-  };
-
-  const renderStockBar = (item) => {
-    const currentStock = item.currentStock || 0;
-    const maxStock = item.maxStockLevel || 100;
-    const percentage = Math.min((currentStock / maxStock) * 100, 100);
-    
-    return (
-      <Box sx={{ width: '100%', minWidth: 100 }}>
-        <MuiLinearProgress
-          variant="determinate"
-          value={percentage}
-          color={getStockLevelColor(currentStock, item.minStockLevel, maxStock)}
-          sx={{ height: 8, borderRadius: 4 }}
-        />
-        <Typography variant="caption" color="textSecondary">
-          {currentStock} / {maxStock}
-        </Typography>
-      </Box>
-    );
-  };
-
-  const getStockSummary = () => {
-    const outOfStock = lowStockItems.filter(item => (item.currentStock || 0) <= 0).length;
-    const lowStock = lowStockItems.filter(item => {
-      const currentStock = item.currentStock || 0;
-      return currentStock > 0 && (currentStock <= (item.reorderLevel || 0) || currentStock <= (item.minStockLevel || 0));
-    }).length;
-    return { outOfStock, lowStock };
-  };
-
-  const displayItems = tabValue === 1 ? lowStockItems : items;
-  const stockSummary = tabValue === 1 ? getStockSummary() : null;
+  const formatCurrency = (amt) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(amt || 0);
 
   return (
     <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4" fontWeight="bold">
-            Items
-          </Typography>
-          <Typography variant="body2" color="textSecondary">
-            {tabValue === 1 
-              ? `View items that need restocking (${stockSummary?.outOfStock || 0} Out of Stock, ${stockSummary?.lowStock || 0} Low Stock)` 
-              : 'Manage your product inventory'}
-          </Typography>
+      {/* Header & Master Shortcuts */}
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={1}>
+        <Box display="flex" alignItems="center" gap={1}>
+          <Inventory sx={{ fontSize: 32, color: 'primary.main' }} />
+          <Box>
+            <Typography variant="h5" fontWeight="bold">
+              Product & Item Catalog
+            </Typography>
+            <Typography variant="body2" color="textSecondary">
+              Manage inventory master records, barcodes, price tiers, and stock alerts
+            </Typography>
+          </Box>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => navigate('/items/new')}
-          sx={{ borderRadius: 2 }}
-        >
-          Add Item
-        </Button>
+        <Box display="flex" gap={1} flexWrap="wrap">
+          <Button variant="outlined" startIcon={<FileDownload />} onClick={handleExport}>
+            Export CSV
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => navigate('/items/new')}
+            sx={{ borderRadius: 2 }}
+          >
+            Add Product
+          </Button>
+        </Box>
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
-
-      {tabValue === 1 && lowStockItems.length > 0 && (
-        <Box display="flex" gap={2} mb={2}>
-          <Chip
-            label={`Out of Stock: ${stockSummary?.outOfStock || 0}`}
-            color="error"
-            icon={<Warning />}
-          />
-          <Chip
-            label={`Low Stock: ${stockSummary?.lowStock || 0}`}
-            color="warning"
-            icon={<Warning />}
-          />
-          <Chip
-            label={`Total: ${lowStockItems.length}`}
-            color="info"
-            icon={<Inventory />}
-          />
-        </Box>
-      )}
-
-      <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 2 }}>
-        <Tab label="All Items" icon={<Inventory />} iconPosition="start" />
-        <Tab 
-          label="Low Stock" 
-          icon={<Warning />} 
-          iconPosition="start" 
-          sx={{ 
-            '&.Mui-selected': { 
-              color: '#ed6c02' 
-            } 
-          }}
-        />
-        <Tab label="Brands" icon={<Category />} iconPosition="start" onClick={() => navigate('/items/brands')} />
-        <Tab label="Groups" icon={<Category />} iconPosition="start" onClick={() => navigate('/items/groups')} />
-        <Tab label="Sections" icon={<Category />} iconPosition="start" onClick={() => navigate('/items/sections')} />
-        <Tab label="Units" icon={<Straighten />} iconPosition="start" onClick={() => navigate('/items/units')} />
-        <Tab label="Taxes" icon={<LocalOffer />} iconPosition="start" onClick={() => navigate('/items/taxes')} />
-      </Tabs>
-
-      <Paper sx={{ p: 2, borderRadius: 2 }}>
-        <Box display="flex" gap={2} mb={2} flexWrap="wrap">
-          <TextField
-            placeholder={tabValue === 1 ? "Search low stock items..." : "Search items by name or code..."}
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ flexGrow: 1, minWidth: 200 }}
-            size="small"
-          />
-          <Button
-            variant="outlined"
-            startIcon={<Refresh />}
-            onClick={() => {
-              if (tabValue === 1) {
-                fetchLowStockItems();
-              } else {
-                fetchItems();
-              }
-            }}
-            size="medium"
-          >
-            Refresh
-          </Button>
-        </Box>
-
-        {loading ? (
-          <Box sx={{ width: '100%', py: 4 }}>
-            <LinearProgress />
-            <Typography textAlign="center" sx={{ mt: 2 }} color="textSecondary">
-              {tabValue === 1 ? 'Loading low stock items...' : 'Loading items...'}
-            </Typography>
-          </Box>
-        ) : (
-          <>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow sx={{ backgroundColor: '#f5f7fa' }}>
-                    <TableCell>#</TableCell>
-                    <TableCell>Code</TableCell>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Brand</TableCell>
-                    <TableCell>Group</TableCell>
-                    <TableCell align="right">Price</TableCell>
-                    <TableCell>Stock</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Created At</TableCell>
-                    <TableCell align="center">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {!displayItems || displayItems.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
-                        <Typography variant="body1" color="textSecondary">
-                          {tabValue === 1 
-                            ? 'No low stock or out of stock items found. All items have sufficient stock.' 
-                            : search 
-                              ? `No items found matching "${search}"` 
-                              : 'No items found. Click "Add Item" to create one.'}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    displayItems.map((item, index) => {
-                      const stockStatus = getStockStatus(item);
-                      return (
-                        <TableRow key={item.id} hover>
-                          <TableCell>{page * rowsPerPage + index + 1}</TableCell>
-                          <TableCell>
-                            <Typography variant="body2" fontWeight={500}>
-                              {item.code}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <Inventory sx={{ color: '#1976d2', fontSize: 20 }} />
-                              <Box>
-                                <Typography fontWeight={500}>{item.name}</Typography>
-                                {isNewItem(item.createdAt) && (
-                                  <Chip 
-                                    label="NEW" 
-                                    color="primary" 
-                                    size="small" 
-                                    sx={{ ml: 1, height: 18, fontSize: '0.6rem' }}
-                                  />
-                                )}
-                              </Box>
-                            </Box>
-                          </TableCell>
-                          <TableCell>{item.brandName || '-'}</TableCell>
-                          <TableCell>{item.groupName || '-'}</TableCell>
-                          <TableCell align="right">
-                            <Typography variant="body2" fontWeight={500}>
-                              {formatCurrency(item.sellingPrice)}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            {renderStockBar(item)}
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              icon={stockStatus.icon}
-                              label={stockStatus.label}
-                              color={stockStatus.color}
-                              size="small"
-                              sx={{ fontWeight: 500 }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="caption" color="textSecondary">
-                              {formatDate(item.createdAt)}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="center">
-                            <Tooltip title="View">
-                              <IconButton
-                                size="small"
-                                color="info"
-                                onClick={() => navigate(`/items/${item.id}`)}
-                              >
-                                <Visibility />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Edit">
-                              <IconButton
-                                size="small"
-                                color="primary"
-                                onClick={() => navigate(`/items/edit/${item.id}`)}
-                              >
-                                <Edit />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Delete">
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => openDeleteDialog(item)}
-                              >
-                                <Delete />
-                              </IconButton>
-                            </Tooltip>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-
-            <TablePagination
-              rowsPerPageOptions={[5, 10, 25, 50]}
-              component="div"
-              count={totalElements}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={(e, newPage) => setPage(newPage)}
-              onRowsPerPageChange={(e) => {
-                setRowsPerPage(parseInt(e.target.value, 10));
-                setPage(0);
-              }}
-            />
-          </>
-        )}
+      {/* Master Data Quick Navigation Chips */}
+      <Paper sx={{ p: 1.5, mb: 2.5, bgcolor: 'grey.50', display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Typography variant="caption" fontWeight="600" color="textSecondary" sx={{ mr: 1 }}>
+          MASTER DATA:
+        </Typography>
+        <Chip icon={<CategoryIcon />} label="Categories" onClick={() => navigate('/items/categories')} clickable color="primary" variant="outlined" size="small" />
+        <Chip icon={<LocalOffer />} label="Brands" onClick={() => navigate('/items/brands')} clickable color="primary" variant="outlined" size="small" />
+        <Chip icon={<Inventory />} label="Item Groups" onClick={() => navigate('/items/groups')} clickable color="primary" variant="outlined" size="small" />
+        <Chip icon={<Straighten />} label="Units (UOM)" onClick={() => navigate('/items/units')} clickable color="primary" variant="outlined" size="small" />
+        <Chip icon={<LocalOffer />} label="Taxes / GST" onClick={() => navigate('/items/taxes')} clickable color="primary" variant="outlined" size="small" />
+        <Chip icon={<Sell />} label="Price Lists & Tiers" onClick={() => navigate('/items/price-lists')} clickable color="secondary" variant="outlined" size="small" />
       </Paper>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete Item</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete item "{selectedItem?.name}"?
-            This action cannot be undone.
-          </DialogContentText>
-          <Box mt={2} p={2} bgcolor="#f5f7fa" borderRadius={1}>
-            <Typography variant="body2">
-              <strong>Code:</strong> {selectedItem?.code}
-            </Typography>
-            <Typography variant="body2">
-              <strong>Current Stock:</strong> {selectedItem?.currentStock}
-            </Typography>
-            <Typography variant="body2">
-              <strong>Price:</strong> {formatCurrency(selectedItem?.sellingPrice)}
-            </Typography>
-          </Box>
+      {/* KPI Stats Cards */}
+      <Grid container spacing={2} mb={3}>
+        <Grid item xs={6} sm={4} md={2.4}>
+          <Card sx={{ bgcolor: '#e3f2fd', borderLeft: '4px solid #1976d2' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="caption" color="textSecondary" fontWeight="600">TOTAL PRODUCTS</Typography>
+              <Typography variant="h5" fontWeight="bold" color="primary.main">{stats.totalItems}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={4} md={2.4}>
+          <Card sx={{ bgcolor: '#e8f5e9', borderLeft: '4px solid #2e7d32' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="caption" color="textSecondary" fontWeight="600">STOCK VALUE</Typography>
+              <Typography variant="h6" fontWeight="bold" color="success.main">{formatCurrency(stats.stockValue)}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={4} md={2.4}>
+          <Card sx={{ bgcolor: '#fff3e0', borderLeft: '4px solid #ed6c02', cursor: 'pointer' }} onClick={() => setTabValue(1)}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="caption" color="textSecondary" fontWeight="600">LOW STOCK</Typography>
+              <Typography variant="h5" fontWeight="bold" color="warning.main">{stats.lowStockCount}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={4} md={2.4}>
+          <Card sx={{ bgcolor: '#ffebee', borderLeft: '4px solid #d32f2f', cursor: 'pointer' }} onClick={() => setTabValue(2)}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="caption" color="textSecondary" fontWeight="600">OUT OF STOCK</Typography>
+              <Typography variant="h5" fontWeight="bold" color="error.main">{stats.outOfStockCount}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={4} md={2.4}>
+          <Card sx={{ bgcolor: '#f3e5f5', borderLeft: '4px solid #9c27b0', cursor: 'pointer' }} onClick={() => setTabValue(3)}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography variant="caption" color="textSecondary" fontWeight="600">EXPIRING (30D)</Typography>
+              <Typography variant="h5" fontWeight="bold" sx={{ color: '#9c27b0' }}>{stats.expiringSoonCount}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Tabs for Quick Filter */}
+      <Paper sx={{ mb: 2 }}>
+        <Tabs
+          value={tabValue}
+          onChange={(e, val) => {
+            setTabValue(val);
+            setPage(0);
+          }}
+          indicatorColor="primary"
+          textColor="primary"
+        >
+          <Tab icon={<Inventory />} label="All Products" iconPosition="start" />
+          <Tab icon={<Warning color="warning" />} label={`Low Stock (${stats.lowStockCount})`} iconPosition="start" />
+          <Tab icon={<Warning color="error" />} label={`Out of Stock (${stats.outOfStockCount})`} iconPosition="start" />
+          <Tab icon={<Schedule />} label={`Expiring Soon (${stats.expiringSoonCount})`} iconPosition="start" />
+        </Tabs>
+      </Paper>
+
+      {/* Search & Filtering Bar */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={6} md={6}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search by SKU, Barcode, Product Name, Brand, Category, or Batch..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Grid>
+          <Grid item xs={6} sm={3} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Filter Category</InputLabel>
+              <Select
+                value={categoryFilter}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value);
+                  setPage(0);
+                }}
+                label="Filter Category"
+              >
+                <MenuItem value="ALL">All Categories</MenuItem>
+                {categories.map((c) => (
+                  <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={6} sm={3} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Filter Brand</InputLabel>
+              <Select
+                value={brandFilter}
+                onChange={(e) => {
+                  setBrandFilter(e.target.value);
+                  setPage(0);
+                }}
+                label="Filter Brand"
+              >
+                <MenuItem value="ALL">All Brands</MenuItem>
+                {brands.map((b) => (
+                  <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+      {/* Products Table */}
+      <TableContainer component={Paper}>
+        <Table size="medium">
+          <TableHead>
+            <TableRow sx={{ bgcolor: 'grey.100' }}>
+              <TableCell width={60}><strong>Image</strong></TableCell>
+              <TableCell><strong>SKU / Barcode</strong></TableCell>
+              <TableCell><strong>Product Name</strong></TableCell>
+              <TableCell><strong>Category / Brand</strong></TableCell>
+              <TableCell align="right"><strong>Cost (₹)</strong></TableCell>
+              <TableCell align="right"><strong>Selling Price (₹)</strong></TableCell>
+              <TableCell align="center"><strong>Stock</strong></TableCell>
+              <TableCell align="center"><strong>Status</strong></TableCell>
+              <TableCell align="right"><strong>Actions</strong></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {items.length > 0 ? (
+              items.map((item) => {
+                const stock = Number(item.currentStock) || 0;
+                const min = Number(item.minStock || item.minimumStock) || 0;
+                const isOut = stock <= 0;
+                const isLow = !isOut && min > 0 && stock <= min * 2;
+
+                return (
+                  <TableRow key={item.id} hover>
+                    <TableCell>
+                      <Avatar
+                        src={item.imageUrl || item.image || ''}
+                        variant="rounded"
+                        sx={{ width: 44, height: 44, bgcolor: 'grey.200' }}
+                      >
+                        <Inventory fontSize="small" color="disabled" />
+                      </Avatar>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight="700" color="primary.main">
+                        {item.itemCode || item.code || '-'}
+                      </Typography>
+                      {item.barcode ? (
+                        <Box display="flex" alignItems="center" gap={0.5}>
+                          <Typography variant="caption" color="textSecondary">
+                            {item.barcode}
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            onClick={() => setBarcodeDialog({ open: true, item })}
+                            title="View / Print Barcode"
+                            sx={{ p: 0.2 }}
+                          >
+                            <QrCode fontSize="inherit" />
+                          </IconButton>
+                        </Box>
+                      ) : (
+                        <Typography variant="caption" color="text.disabled">No barcode</Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight="600">
+                        {item.name}
+                      </Typography>
+                      {item.batchNumber && (
+                        <Typography variant="caption" color="textSecondary" display="block">
+                          Batch: {item.batchNumber} {item.expiryDate ? `| Exp: ${item.expiryDate}` : ''}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {item.categoryName || item.groupName || '-'}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        Brand: {item.brandName || '-'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography variant="body2" color="textSecondary">
+                        {formatCurrency(item.purchasePrice)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography variant="body2" fontWeight="700">
+                        {formatCurrency(item.sellingPrice)}
+                      </Typography>
+                      {item.wholesalePrice && item.wholesalePrice !== item.sellingPrice ? (
+                        <Typography variant="caption" color="textSecondary" display="block">
+                          WS: {formatCurrency(item.wholesalePrice)}
+                        </Typography>
+                      ) : null}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip
+                        label={`${stock} ${item.unitName || ''}`}
+                        color={isOut ? 'error' : isLow ? 'warning' : 'success'}
+                        size="small"
+                        sx={{ fontWeight: 'bold' }}
+                      />
+                      {min > 0 && (
+                        <Typography variant="caption" color="textSecondary" display="block">
+                          Min: {min}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip
+                        label={item.isActive !== false ? 'Active' : 'Inactive'}
+                        size="small"
+                        color={item.isActive !== false ? 'primary' : 'default'}
+                        variant={item.isActive !== false ? 'outlined' : 'filled'}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="Edit Product">
+                        <IconButton size="small" color="primary" onClick={() => navigate(`/items/edit/${item.id}`)}>
+                          <Edit fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete Product">
+                        <IconButton size="small" color="error" onClick={() => handleDeleteClick(item)}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            ) : (
+              <TableRow>
+                <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                  <Typography color="textSecondary">
+                    {loading ? 'Loading catalog products...' : 'No products found matching criteria'}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50]}
+          component="div"
+          count={totalElements}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={(e, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+        />
+      </TableContainer>
+
+      {/* Barcode Viewer Dialog */}
+      <Dialog
+        open={barcodeDialog.open}
+        onClose={() => setBarcodeDialog({ open: false, item: null })}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ textAlign: 'center' }}>
+          Product Barcode
+        </DialogTitle>
+        <DialogContent sx={{ textAlign: 'center', py: 2 }}>
+          {barcodeDialog.item && (
+            <Box>
+              <Typography variant="h6" fontWeight="bold">
+                {barcodeDialog.item.name}
+              </Typography>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                SKU: {barcodeDialog.item.itemCode || barcodeDialog.item.code}
+              </Typography>
+              <Box
+                sx={{
+                  mt: 2,
+                  p: 3,
+                  bgcolor: 'grey.100',
+                  borderRadius: 2,
+                  border: '1px solid #ddd',
+                  display: 'inline-block',
+                }}
+              >
+                <QrCode sx={{ fontSize: 96, color: 'text.primary' }} />
+                <Typography variant="h6" fontFamily="monospace" letterSpacing={2} fontWeight="bold">
+                  {barcodeDialog.item.barcode}
+                </Typography>
+              </Box>
+              <Box mt={2} display="flex" justifyContent="center">
+                <Button
+                  size="small"
+                  startIcon={<ContentCopy />}
+                  onClick={() => copyToClipboard(barcodeDialog.item.barcode)}
+                >
+                  Copy Barcode Number
+                </Button>
+              </Box>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={handleDelete} 
-            color="error" 
-            variant="contained"
-            startIcon={<Delete />}
-          >
-            Delete
-          </Button>
+          <Button onClick={() => setBarcodeDialog({ open: false, item: null })}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, item: null })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Product"
+        message={`Are you sure you want to delete product "${deleteDialog.item?.name}" (${deleteDialog.item?.itemCode || deleteDialog.item?.code})?`}
+      />
     </Box>
   );
 };

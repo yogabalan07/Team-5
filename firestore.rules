@@ -159,6 +159,16 @@ service cloud.firestore {
       allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
     }
 
+    match /categories/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /priceLists/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
     match /itemGroups/{docId} {
       allow read: if isEnabled();
       allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);

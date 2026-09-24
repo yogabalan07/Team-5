@@ -12,10 +12,12 @@ import SupplierForm from './components/suppliers/SupplierForm';
 import ItemList from './components/items/ItemList';
 import ItemForm from './components/items/ItemForm';
 import BrandList from './components/items/BrandList';
+import CategoryList from './components/items/CategoryList';
 import GroupList from './components/items/GroupList';
 import SectionList from './components/items/SectionList';
 import UnitList from './components/items/UnitList';
 import TaxList from './components/items/TaxList';
+import PriceList from './components/items/PriceList';
 import SalesEntry from './components/sales/SalesEntry';
 import SalesList from './components/sales/SalesList';
 import SalesReturn from './components/sales/SalesReturn';
@@ -94,11 +96,13 @@ function App() {
             <Route path="/items/:id" element={<ItemForm />} />
             
             {/* ==================== ITEM MASTER ROUTES ==================== */}
+            <Route path="/items/categories" element={<CategoryList />} />
             <Route path="/items/brands" element={<BrandList />} />
             <Route path="/items/groups" element={<GroupList />} />
             <Route path="/items/sections" element={<SectionList />} />
             <Route path="/items/units" element={<UnitList />} />
             <Route path="/items/taxes" element={<TaxList />} />
+            <Route path="/items/price-lists" element={<PriceList />} />
             
             {/* ==================== SALES ROUTES ==================== */}
             <Route path="/sales/entry" element={<SalesEntry />} />
