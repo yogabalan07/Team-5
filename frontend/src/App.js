@@ -38,6 +38,9 @@ import PurchaseList from './components/purchases/PurchaseList';
 import PurchaseOrderList from './components/purchases/PurchaseOrderList';
 import PurchaseOrderPrint from './components/purchases/PurchaseOrderPrint';
 import GRNVerification from './components/purchases/GRNVerification';
+import PurchaseRequisitionList from './components/purchases/PurchaseRequisitionList';
+import SupplierQuotationList from './components/purchases/SupplierQuotationList';
+import DebitNoteList from './components/purchases/DebitNoteList';
 import BillReceipt from './components/accounts/BillReceipt';
 import BillPayment from './components/accounts/BillPayment';
 import LedgerView from './components/accounts/LedgerView';
@@ -131,7 +134,10 @@ function App() {
             <Route path="/sales/invoice/:id" element={<SalesInvoiceView />} />
             
             {/* ==================== PURCHASE ROUTES ==================== */}
+            <Route path="/purchases/requisitions" element={<PurchaseRequisitionList />} />
+            <Route path="/purchases/quotations" element={<SupplierQuotationList />} />
             <Route path="/purchases/order" element={<PurchaseOrder />} />
+            <Route path="/purchases/order/:id" element={<PurchaseOrder />} />
             <Route path="/purchases/edit-order/:id" element={<PurchaseOrder />} />
             <Route path="/purchases/orders" element={<PurchaseOrderList />} />
             <Route path="/purchases/print-order/:id" element={<PurchaseOrderPrint />} />
@@ -140,6 +146,7 @@ function App() {
             <Route path="/purchases/list" element={<PurchaseList />} />
             <Route path="/purchases/return" element={<PurchaseReturn />} />
             <Route path="/purchases/grn" element={<GRNVerification />} />
+            <Route path="/purchases/debit-notes" element={<DebitNoteList />} />
             
             {/* ==================== ACCOUNTS ROUTES ==================== */}
             <Route path="/accounts/receipts" element={<BillReceipt />} />

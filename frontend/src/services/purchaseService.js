@@ -63,8 +63,12 @@ function buildOrder(data, docId) {
     supplierName: data.supplierName || '',
     items,
     status: data.status || 'OPEN',
+    approvalStatus: data.approvalStatus || 'DRAFT',
+    approvalNote: data.approvalNote || '',
+    approvedBy: data.approvedBy || '',
+    approvedAt: data.approvedAt || '',
     note: data.note || '',
-    createdBy: actorName(),
+    createdBy: data.createdBy || actorName(),
     updatedAt: nowISO(),
     searchText: buildSearchText(data.poNumber || '', data.supplierName || ''),
   };
@@ -143,6 +147,13 @@ export const purchaseService = {
       ...buildOrder(data, id),
       poNumber: existing.poNumber,
       createdAt: existing.createdAt,
+      // Approval decisions belong to the workflow service; never reset them
+      // when an order's commercial details are edited.
+      approvalStatus: existing.approvalStatus || 'DRAFT',
+      approvalNote: existing.approvalNote || '',
+      approvedBy: existing.approvedBy || '',
+      approvedAt: existing.approvedAt || '',
+      createdBy: existing.createdBy || actorName(),
     });
     return { poNumber: existing.poNumber, id };
   },

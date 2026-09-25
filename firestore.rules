@@ -143,7 +143,7 @@ service cloud.firestore {
     match /customers/{docId} {
       allow read: if isEnabled();
       allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']) ||
-        (hasAny(['ACCOUNTS']) && changesOnly(['creditBalance']));
+        (hasAny(['ACCOUNTS']) && changesOnly(['creditBalance', 'updatedAt']));
       allow delete: if isAdmin();
     }
 
@@ -155,7 +155,7 @@ service cloud.firestore {
     match /suppliers/{docId} {
       allow read: if isEnabled();
       allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']) ||
-        (hasAny(['ACCOUNTS']) && changesOnly(['creditBalance']));
+        (hasAny(['ACCOUNTS']) && changesOnly(['creditBalance', 'updatedAt']));
       allow delete: if isAdmin();
     }
 
@@ -220,11 +220,29 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /purchaseRequisitions/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /supplierQuotations/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /debitNotes/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER', 'ACCOUNTS']);
+      allow delete: if isAdmin();
+    }
+
     match /purchaseInvoices/{docId} {
       allow read: if isEnabled();
       allow create: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
       allow update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']) ||
-        (hasAny(['ACCOUNTS']) && changesOnly(['balanceAmount', 'paymentStatus']));
+        (hasAny(['ACCOUNTS']) && changesOnly(['balanceAmount', 'paymentStatus', 'updatedAt']));
       allow delete: if isAdmin();
     }
 
@@ -253,7 +271,7 @@ service cloud.firestore {
       allow read: if isEnabled();
       allow create: if hasAny(['ADMIN', 'BILLING_CLERK']);
       allow update: if hasAny(['ADMIN', 'BILLING_CLERK']) ||
-        (hasAny(['ACCOUNTS']) && changesOnly(['balanceAmount', 'paymentStatus']));
+        (hasAny(['ACCOUNTS']) && changesOnly(['balanceAmount', 'paymentStatus', 'updatedAt']));
       allow delete: if isAdmin();
     }
 

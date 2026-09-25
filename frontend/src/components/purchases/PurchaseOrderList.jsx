@@ -43,9 +43,12 @@ import {
   LocalShipping,
   CheckCircle,
   Pending,
+  Send,
+  Cancel,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { purchaseService } from '../../services/purchaseService';
+import { purchaseWorkflowService } from '../../services/purchaseWorkflowService';
 import { supplierService } from '../../services/supplierService';
 
 const PurchaseOrderList = () => {
@@ -100,8 +103,16 @@ const PurchaseOrderList = () => {
         data = await purchaseService.getAllOrders(page, rowsPerPage);
       }
       
-      setOrders(data.content || []);
-      setTotalElements(data.totalElements || 0);
+      let items = data.content || [];
+      // Status filter is applied to the fetched page (Firestore has no
+      // composite index for it on the Spark tier).
+      if (filters.isConverted === 'true') {
+        items = items.filter((o) => o.status === 'COMPLETED');
+      } else if (filters.isConverted === 'false') {
+        items = items.filter((o) => o.status !== 'COMPLETED');
+      }
+      setOrders(items);
+      setTotalElements(filters.isConverted ? items.length : (data.totalElements || 0));
       console.log('✅ Orders loaded:', data.content?.length || 0);
     } catch (error) {
       console.error('❌ Fetch error:', error);
@@ -167,6 +178,23 @@ const PurchaseOrderList = () => {
     window.open(`/purchases/print-order/${order.id}`, '_blank');
   };
 
+  const orderTotal = (order) => {
+    if (typeof order.totalAmount === 'number') return order.totalAmount;
+    return (order.items || []).reduce((sum, l) => sum + (Number(l.totalAmount) || 0), 0);
+  };
+
+  const handleApproval = async (order, action) => {
+    try {
+      if (action === 'SUBMIT') await purchaseWorkflowService.submitOrderForApproval(order.id);
+      else if (action === 'APPROVE') await purchaseWorkflowService.approveOrder(order.id);
+      else if (action === 'REJECT') await purchaseWorkflowService.rejectOrder(order.id, 'Rejected from list');
+      toast.success(`${order.poNumber}: ${action === 'SUBMIT' ? 'submitted for approval' : action === 'APPROVE' ? 'approved' : 'rejected'}`);
+      await fetchOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Approval action failed');
+    }
+  };
+
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters({ ...filters, [name]: value });
@@ -200,25 +228,68 @@ const PurchaseOrderList = () => {
   };
 
   const getStatusChip = (order) => {
-    if (order.isConverted) {
-      return (
+    const approval = order.approvalStatus || 'DRAFT';
+    return (
+      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
         <Chip
-          icon={<CheckCircle />}
-          label="Converted"
-          color="success"
+          label={approval}
+          color={
+            approval === 'APPROVED' ? 'success'
+              : approval === 'PENDING' ? 'warning'
+                : approval === 'REJECTED' ? 'error'
+                  : 'default'
+          }
           size="small"
           sx={{ fontWeight: 500 }}
         />
-      );
-    }
+        {order.status === 'COMPLETED' && (
+          <Chip
+            icon={<CheckCircle />}
+            label="Invoiced"
+            color="success"
+            size="small"
+            sx={{ fontWeight: 500 }}
+          />
+        )}
+        {order.status !== 'COMPLETED' && (
+          <Chip
+            icon={<Pending />}
+            label="Open"
+            color="info"
+            size="small"
+            sx={{ fontWeight: 500 }}
+          />
+        )}
+      </Box>
+    );
+  };
+
+  const getApprovalActions = (order) => {
+    const approval = order.approvalStatus || 'DRAFT';
     return (
-      <Chip
-        icon={<Pending />}
-        label="Pending"
-        color="warning"
-        size="small"
-        sx={{ fontWeight: 500 }}
-      />
+      <>
+        {(approval === 'DRAFT' || approval === 'REJECTED') && (
+          <Tooltip title="Submit for Approval">
+            <IconButton size="small" color="info" onClick={() => handleApproval(order, 'SUBMIT')}>
+              <Send fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        {approval === 'PENDING' && (
+          <>
+            <Tooltip title="Approve">
+              <IconButton size="small" color="success" onClick={() => handleApproval(order, 'APPROVE')}>
+                <CheckCircle fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Reject">
+              <IconButton size="small" color="error" onClick={() => handleApproval(order, 'REJECT')}>
+                <Cancel fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </>
+        )}
+      </>
     );
   };
 
@@ -415,13 +486,14 @@ const PurchaseOrderList = () => {
                         </TableCell>
                         <TableCell align="right">
                           <Typography fontWeight={600} color="primary">
-                            ₹{order.totalAmount?.toFixed(2) || '0.00'}
+                            ₹{orderTotal(order).toFixed(2)}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           {getStatusChip(order)}
                         </TableCell>
                         <TableCell align="center">
+                          {getApprovalActions(order)}
                           <Tooltip title="Edit">
                             <IconButton
                               size="small"
@@ -440,7 +512,7 @@ const PurchaseOrderList = () => {
                               <Visibility />
                             </IconButton>
                           </Tooltip>
-                          {!order.isConverted && (
+                          {order.status !== 'COMPLETED' && (
                             <Tooltip title="Convert to Invoice">
                               <IconButton
                                 size="small"

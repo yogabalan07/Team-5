@@ -88,10 +88,13 @@ const menuItems = [
     icon: <Storefront />,
     path: '/purchases/list',
     subItems: [
+      { text: 'Requisitions', path: '/purchases/requisitions' },
+      { text: 'Supplier Quotes', path: '/purchases/quotations' },
       { text: 'Purchase Orders', path: '/purchases/orders' },
       { text: 'Purchase Entry', path: '/purchases/list' },
       { text: 'Purchase Return', path: '/purchases/return' },
       { text: 'GRN Verification', path: '/purchases/grn' },
+      { text: 'Debit Notes', path: '/purchases/debit-notes' },
     ],
   },
   {

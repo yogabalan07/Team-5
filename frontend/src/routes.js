@@ -43,6 +43,11 @@ export const ROUTES = {
   // Purchases
   PURCHASE_ORDER: '/purchases/order',
   PURCHASE_ENTRY: '/purchases/entry',
+  PURCHASE_REQUISITIONS: '/purchases/requisitions',
+  PURCHASE_QUOTATIONS: '/purchases/quotations',
+  PURCHASE_ORDERS: '/purchases/orders',
+  PURCHASE_GRN: '/purchases/grn',
+  PURCHASE_DEBIT_NOTES: '/purchases/debit-notes',
   
   // Accounts
   ACCOUNTS_RECEIPTS: '/accounts/receipts',
