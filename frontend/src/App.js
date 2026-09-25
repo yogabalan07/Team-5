@@ -50,6 +50,11 @@ import WarehouseStockView from './components/warehouses/WarehouseStockView';
 import BillReceipt from './components/accounts/BillReceipt';
 import BillPayment from './components/accounts/BillPayment';
 import LedgerView from './components/accounts/LedgerView';
+import ReceivablesPayables from './components/finance/ReceivablesPayables';
+import ExpenseList from './components/finance/ExpenseList';
+import PaymentVoucherList from './components/finance/PaymentVoucherList';
+import Cashbook from './components/finance/Cashbook';
+import FinancialSummary from './components/finance/FinancialSummary';
 import SalesReport from './components/reports/SalesReport';
 import SalesDetailsReport from './components/reports/SalesDetailsReport';
 import PurchaseReport from './components/reports/PurchaseReport';
@@ -169,6 +174,12 @@ function App() {
             <Route path="/accounts/receipts" element={<BillReceipt />} />
             <Route path="/accounts/payments" element={<BillPayment />} />
             <Route path="/accounts/ledger" element={<LedgerView />} />
+            <Route path="/accounts/receivables" element={<ReceivablesPayables mode="AR" />} />
+            <Route path="/accounts/payables" element={<ReceivablesPayables mode="AP" />} />
+            <Route path="/accounts/cashbook" element={<Cashbook />} />
+            <Route path="/accounts/expenses" element={<ExpenseList />} />
+            <Route path="/accounts/vouchers" element={<PaymentVoucherList />} />
+            <Route path="/accounts/summary" element={<FinancialSummary />} />
             
             {/* ==================== REPORT ROUTES ==================== */}
             <Route path="/reports/sales" element={<SalesReport />} />

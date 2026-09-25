@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Paper,
@@ -19,21 +19,17 @@ import {
   Alert,
   Card,
   CardContent,
-  Divider,
   Chip,
   IconButton,
 } from '@mui/material';
 import {
   Receipt as ReceiptIcon,
   Search,
-  Person,
   AttachMoney,
   Save,
-  Cancel,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { accountService } from '../../services/accountService';
-import { customerService } from '../../services/customerService';
 import { salesService } from '../../services/salesService';
 import CustomerSearch from '../customers/CustomerSearch';
 
@@ -93,18 +89,18 @@ const BillReceipt = () => {
     const requestData = {
       receiptDate: receipt.receiptDate,
       customerId: customer.id,
+      customerName: customer.name || '',
       invoiceId: selectedInvoice.id,
-      totalAmount: selectedInvoice.balanceAmount,
-      adjustAmount: receipt.adjustAmount,
-      balanceAmount: selectedInvoice.balanceAmount - receipt.adjustAmount,
-      paymentMode: receipt.paymentMode,
+      invoiceNo: selectedInvoice.invoiceNo || '',
+      amount: Number(receipt.adjustAmount) || 0,
+      paymentMethod: receipt.paymentMode,
       referenceNo: receipt.referenceNo || '',
-      notes: receipt.notes,
+      note: receipt.notes,
     };
 
     setLoading(true);
     try {
-      const response = await accountService.createReceipt(requestData);
+      await accountService.createBillReceipt(requestData);
       toast.success('Receipt created successfully!');
       setSelectedInvoice(null);
       setCustomer(null);
@@ -214,21 +210,23 @@ const BillReceipt = () => {
                           >
                             <TableCell>{inv.invoiceNo}</TableCell>
                             <TableCell align="right">
-                              {new Date(inv.invoiceDate).toLocaleDateString()}
+                              {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString() : '-'}
                             </TableCell>
                             <TableCell align="right">
-                              ₹{inv.netAmount.toFixed(2)}
+                              ₹{(Number(inv.grandTotal) || Number(inv.netAmount) || 0).toFixed(2)}
                             </TableCell>
                             <TableCell align="right">
                               <Typography color="warning.main" fontWeight={500}>
-                                ₹{inv.balanceAmount.toFixed(2)}
+                                ₹{(Number(inv.balanceAmount) || 0).toFixed(2)}
                               </Typography>
                             </TableCell>
                             <TableCell align="right">
-                              {Math.ceil(
-                                (new Date() - new Date(inv.invoiceDate)) /
-                                (1000 * 60 * 60 * 24)
-                              )}
+                              {inv.invoiceDate
+                                ? Math.ceil(
+                                    (new Date() - new Date(inv.invoiceDate)) /
+                                    (1000 * 60 * 60 * 24)
+                                  )
+                                : '-'}
                             </TableCell>
                             <TableCell align="center">
                               <Chip
@@ -275,7 +273,7 @@ const BillReceipt = () => {
                       <strong>Customer:</strong> {customer?.name}
                     </Typography>
                     <Typography variant="body2">
-                      <strong>Balance:</strong> ₹{selectedInvoice.balanceAmount.toFixed(2)}
+                      <strong>Balance:</strong> ₹{(Number(selectedInvoice.balanceAmount) || 0).toFixed(2)}
                     </Typography>
                   </Box>
 

@@ -3,7 +3,7 @@
 // payments against supplier dues. Receipts/payments adjust both the invoice
 // balance and the party credit balance atomically.
 
-import { getDocs, doc, query, where, limit } from '@firebase/firestore';
+import { getDocs, getDoc, doc, query, where, limit } from '@firebase/firestore';
 import {
   col,
   docOf,
@@ -36,6 +36,15 @@ function wrapError(e, fallback) {
   return serviceError((e && e.message) || fallback, 400);
 }
 
+async function getCustomerDoc(id) {
+  try {
+    const snap = await getDoc(doc(db, 'customers', String(id)));
+    return snap.exists() ? snap.data() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export const accountService = {
   // ---- Reports ----------------------------------------------------------
   async getCustomersWithBalance() {
@@ -56,9 +65,72 @@ export const accountService = {
     return { suppliers: withBalance, totalDue, totalSuppliers: withBalance.length };
   },
 
+  // Chronological customer statement in the shape LedgerView expects:
+  // opening balance, invoices (debit), receipts/returns (credit), oldest first
+  // so running balances add up correctly.
   async getCustomerLedger(customerId) {
-    const snap = await getDocs(query(col(RECEIPTS), where('customerId', '==', String(customerId))));
-    return sortByCreatedDesc(fromQuery(snap));
+    const idStr = String(customerId);
+    const [custSnap, invSnap, recSnap, retSnap] = await Promise.all([
+      getCustomerDoc(idStr),
+      getDocs(query(col('salesInvoices'), where('customerId', '==', idStr))),
+      getDocs(query(col(RECEIPTS), where('customerId', '==', idStr))),
+      getDocs(query(col('salesReturns'), where('customerId', '==', idStr))),
+    ]);
+
+    const entries = [];
+    const opening = custSnap ? Number(custSnap.openingBalance) || 0 : 0;
+    if (opening > 0) {
+      entries.push({
+        id: 'opening',
+        type: 'Opening Balance',
+        date: '',
+        amount: round2(opening),
+        paidAmount: 0,
+        invoiceNo: '',
+        description: 'Opening Balance',
+        createdAt: '',
+      });
+    }
+    fromQuery(invSnap).forEach((inv) => {
+      const total = round2(Number(inv.grandTotal) || Number(inv.netAmount) || 0);
+      entries.push({
+        id: inv.id,
+        type: 'Invoice',
+        date: String(inv.invoiceDate || inv.createdAt || '').slice(0, 10),
+        amount: total,
+        paidAmount: round2(total - (Number(inv.balanceAmount) || 0)),
+        invoiceNo: inv.invoiceNo || '',
+        description: `Sales Invoice #${inv.invoiceNo}`,
+        paymentStatus: inv.paymentStatus || '',
+        createdAt: inv.createdAt || '',
+      });
+    });
+    fromQuery(recSnap).forEach((rec) => {
+      entries.push({
+        id: rec.id,
+        type: 'Receipt',
+        date: String(rec.receiptDate || rec.createdAt || '').slice(0, 10),
+        amount: round2(Number(rec.amount) || 0),
+        invoiceNo: rec.invoiceNo || '',
+        description: `Payment Receipt #${rec.receiptNo}`,
+        paymentMode: rec.paymentMethod || 'CASH',
+        createdAt: rec.createdAt || '',
+      });
+    });
+    fromQuery(retSnap).forEach((ret) => {
+      entries.push({
+        id: ret.id,
+        type: 'Credit Note',
+        date: String(ret.returnDate || ret.createdAt || '').slice(0, 10),
+        amount: round2(Number(ret.totalAmount) || Number(ret.totalRefund) || 0),
+        invoiceNo: ret.invoiceNo || '',
+        description: `Sales Return #${ret.returnNo}`,
+        createdAt: ret.createdAt || '',
+      });
+    });
+
+    entries.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.createdAt).localeCompare(String(b.createdAt)));
+    return entries;
   },
 
   async getSupplierLedger(supplierId) {
@@ -78,6 +150,12 @@ export const accountService = {
     try {
       return await runStockTransaction(async (tx) => {
         const ref = doc(db, RECEIPTS);
+        const invSnap = data.invoiceId
+          ? await tx.get(docOf('salesInvoices', String(data.invoiceId)))
+          : null;
+        const custSnap = data.customerId
+          ? await tx.get(docOf('customers', String(data.customerId)))
+          : null;
         const receiptNo = await nextNumber(tx, 'REC', data.receiptDate || todayISO());
         const payload = {
           receiptNo,
@@ -92,26 +170,20 @@ export const accountService = {
           createdBy: actorName(),
           createdAt: nowISO(),
           updatedAt: nowISO(),
-          searchText: buildSearchText(data.receiptNo || '', data.customerName || '', data.invoiceNo || ''),
+          searchText: buildSearchText(receiptNo, data.customerName || '', data.invoiceNo || ''),
         };
         await tx.set(ref, payload);
-        if (data.invoiceId) {
-          const invSnap = await tx.get(docOf('salesInvoices', String(data.invoiceId)));
-          if (invSnap.exists()) {
-            const invoice = invSnap.data();
-            const newBalance = Math.max(0, round2(Number(invoice.balanceAmount) - amount));
-            tx.update(docOf('salesInvoices', String(data.invoiceId)), { balanceAmount: newBalance, paymentStatus: newBalance <= 0 ? 'PAID' : 'DUE' });
-          }
+        if (invSnap && invSnap.exists()) {
+          const invoice = invSnap.data();
+          const newBalance = Math.max(0, round2(Number(invoice.balanceAmount) - amount));
+          tx.update(docOf('salesInvoices', String(data.invoiceId)), { balanceAmount: newBalance, paymentStatus: newBalance <= 0 ? 'PAID' : 'DUE' });
         }
-        if (data.customerId) {
-          const custSnap = await tx.get(docOf('customers', String(data.customerId)));
-          if (custSnap.exists()) {
-            const customer = custSnap.data();
-            const newBalance = Math.max(0, round2(Number(customer.creditBalance) - amount));
-            tx.update(docOf('customers', String(data.customerId)), { creditBalance: newBalance });
-          }
+        if (custSnap && custSnap.exists()) {
+          const customer = custSnap.data();
+          const newBalance = Math.max(0, round2(Number(customer.creditBalance) - amount));
+          tx.update(docOf('customers', String(data.customerId)), { creditBalance: newBalance });
         }
-        return { receiptNo, id: ref.id };
+        return { ...payload, receiptNo, id: ref.id };
       });
     } catch (e) {
       throw wrapError(e, 'Could not create bill receipt');
@@ -138,20 +210,20 @@ export const accountService = {
     const existing = await getByIdOr404(col(RECEIPTS), id);
     try {
       await runStockTransaction(async (tx) => {
-        if (existing.invoiceId) {
-          const invSnap = await tx.get(docOf('salesInvoices', String(existing.invoiceId)));
-          if (invSnap.exists()) {
-            const invoice = invSnap.data();
-            const newBalance = round2(Number(invoice.balanceAmount) + Number(existing.amount));
-            tx.update(docOf('salesInvoices', String(existing.invoiceId)), { balanceAmount: newBalance, paymentStatus: newBalance <= 0 ? 'PAID' : 'DUE' });
-          }
+        const invSnap = existing.invoiceId
+          ? await tx.get(docOf('salesInvoices', String(existing.invoiceId)))
+          : null;
+        const custSnap = existing.customerId
+          ? await tx.get(docOf('customers', String(existing.customerId)))
+          : null;
+        if (invSnap && invSnap.exists()) {
+          const invoice = invSnap.data();
+          const newBalance = round2(Number(invoice.balanceAmount) + Number(existing.amount));
+          tx.update(docOf('salesInvoices', String(existing.invoiceId)), { balanceAmount: newBalance, paymentStatus: newBalance <= 0 ? 'PAID' : 'DUE' });
         }
-        if (existing.customerId) {
-          const custSnap = await tx.get(docOf('customers', String(existing.customerId)));
-          if (custSnap.exists()) {
-            const customer = custSnap.data();
-            tx.update(docOf('customers', String(existing.customerId)), { creditBalance: round2(Number(customer.creditBalance) + Number(existing.amount)) });
-          }
+        if (custSnap && custSnap.exists()) {
+          const customer = custSnap.data();
+          tx.update(docOf('customers', String(existing.customerId)), { creditBalance: round2(Number(customer.creditBalance) + Number(existing.amount)) });
         }
         tx.delete(docOf(RECEIPTS, id));
       });
@@ -173,6 +245,12 @@ export const accountService = {
     try {
       return await runStockTransaction(async (tx) => {
         const ref = doc(db, PAYMENTS);
+        const invSnap = data.invoiceId
+          ? await tx.get(docOf('purchaseInvoices', String(data.invoiceId)))
+          : null;
+        const supSnap = data.supplierId
+          ? await tx.get(docOf('suppliers', String(data.supplierId)))
+          : null;
         const paymentNo = await nextNumber(tx, 'PAY', data.paymentDate || todayISO());
         const payload = {
           paymentNo,
@@ -187,25 +265,19 @@ export const accountService = {
           createdBy: actorName(),
           createdAt: nowISO(),
           updatedAt: nowISO(),
-          searchText: buildSearchText(data.paymentNo || '', data.supplierName || '', data.invoiceNo || ''),
+          searchText: buildSearchText(paymentNo, data.supplierName || '', data.invoiceNo || ''),
         };
         await tx.set(ref, payload);
-        if (data.invoiceId) {
-          const invSnap = await tx.get(docOf('purchaseInvoices', String(data.invoiceId)));
-          if (invSnap.exists()) {
-            const invoice = invSnap.data();
-            const newBalance = Math.max(0, round2(Number(invoice.balanceAmount) - amount));
-            tx.update(docOf('purchaseInvoices', String(data.invoiceId)), { balanceAmount: newBalance, paymentStatus: newBalance <= 0 ? 'PAID' : 'DUE' });
-          }
+        if (invSnap && invSnap.exists()) {
+          const invoice = invSnap.data();
+          const newBalance = Math.max(0, round2(Number(invoice.balanceAmount) - amount));
+          tx.update(docOf('purchaseInvoices', String(data.invoiceId)), { balanceAmount: newBalance, paymentStatus: newBalance <= 0 ? 'PAID' : 'DUE' });
         }
-        if (data.supplierId) {
-          const supSnap = await tx.get(docOf('suppliers', String(data.supplierId)));
-          if (supSnap.exists()) {
-            const supplier = supSnap.data();
-            tx.update(docOf('suppliers', String(data.supplierId)), { creditBalance: Math.max(0, round2(Number(supplier.creditBalance) - amount)) });
-          }
+        if (supSnap && supSnap.exists()) {
+          const supplier = supSnap.data();
+          tx.update(docOf('suppliers', String(data.supplierId)), { creditBalance: Math.max(0, round2(Number(supplier.creditBalance) - amount)) });
         }
-        return { paymentNo, id: ref.id };
+        return { ...payload, paymentNo, id: ref.id };
       });
     } catch (e) {
       throw wrapError(e, 'Could not create bill payment');

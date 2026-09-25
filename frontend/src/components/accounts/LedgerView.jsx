@@ -16,20 +16,17 @@ import {
   IconButton,
   Card,
   CardContent,
-  Divider,
   Alert,
   CircularProgress,
 } from '@mui/material';
 import {
   Search,
-  Person,
   AccountBalance,
   Print,
   Download,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { accountService } from '../../services/accountService';
-import { customerService } from '../../services/customerService';
 import CustomerSearch from '../customers/CustomerSearch';
 
 const LedgerView = () => {
@@ -48,11 +45,9 @@ const LedgerView = () => {
     setLoading(true);
     try {
       const data = await accountService.getCustomerLedger(customerId);
-      console.log('📋 Raw ledger data:', JSON.stringify(data, null, 2));
       setLedger(data);
       setError('');
     } catch (error) {
-      console.error('❌ Error fetching ledger:', error);
       setError('Failed to fetch ledger details');
       toast.error('Failed to fetch ledger');
     } finally {

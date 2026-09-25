@@ -307,6 +307,21 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------
+    // Phase 7 — expenses and payment vouchers (finance)
+    // ------------------------------------------------------------------
+    match /expenses/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'ACCOUNTS']);
+      allow delete: if isAdmin();
+    }
+
+    match /paymentVouchers/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'ACCOUNTS']);
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
     // Counters — written automatically by transactional services to issue
     // collision-free document numbers. Creates/updates need a signed-in,
     // enabled user; deletes are admin-only.

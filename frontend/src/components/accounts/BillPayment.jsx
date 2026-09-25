@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Paper,
@@ -19,7 +19,6 @@ import {
   Alert,
   Card,
   CardContent,
-  Divider,
   Chip,
   IconButton,
   Dialog,
@@ -30,15 +29,12 @@ import {
 import {
   Payment as PaymentIcon,
   Search,
-  Business,
   AttachMoney,
   Save,
-  Cancel,
   Print,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { accountService } from '../../services/accountService';
-import { supplierService } from '../../services/supplierService';
 import { purchaseService } from '../../services/purchaseService';
 import SupplierSearch from '../suppliers/SupplierSearch';
 
@@ -100,18 +96,18 @@ const BillPayment = () => {
     const requestData = {
       paymentDate: payment.paymentDate,
       supplierId: supplier.id,
+      supplierName: supplier.name || '',
       invoiceId: selectedInvoice.id,
-      totalAmount: selectedInvoice.balanceAmount,
-      adjustAmount: payment.adjustAmount,
-      balanceAmount: selectedInvoice.balanceAmount - payment.adjustAmount,
-      paymentMode: payment.paymentMode,
+      invoiceNo: selectedInvoice.invoiceNo || '',
+      amount: Number(payment.adjustAmount) || 0,
+      paymentMethod: payment.paymentMode,
       referenceNo: payment.referenceNo || '',
-      notes: payment.notes,
+      note: payment.notes,
     };
 
     setLoading(true);
     try {
-      const response = await accountService.createPayment(requestData);
+      const response = await accountService.createBillPayment(requestData);
       setCreatedPayment(response);
       setReceiptDialogOpen(true);
       toast.success('Payment created successfully!');
@@ -226,14 +222,16 @@ const BillPayment = () => {
                           >
                             <TableCell>{inv.invoiceNo}</TableCell>
                             <TableCell align="right">
-                              {new Date(inv.invoiceDate).toLocaleDateString()}
+                              {(inv.invoiceDate || inv.purchaseDate)
+                                ? new Date(inv.invoiceDate || inv.purchaseDate).toLocaleDateString()
+                                : '-'}
                             </TableCell>
                             <TableCell align="right">
-                              ₹{inv.netAmount.toFixed(2)}
+                              ₹{(Number(inv.grandTotal) || Number(inv.netAmount) || 0).toFixed(2)}
                             </TableCell>
                             <TableCell align="right">
                               <Typography color="warning.main" fontWeight={500}>
-                                ₹{inv.balanceAmount.toFixed(2)}
+                                ₹{(Number(inv.balanceAmount) || 0).toFixed(2)}
                               </Typography>
                             </TableCell>
                             <TableCell align="center">
@@ -281,7 +279,7 @@ const BillPayment = () => {
                       <strong>Supplier:</strong> {supplier?.name}
                     </Typography>
                     <Typography variant="body2">
-                      <strong>Balance:</strong> ₹{selectedInvoice.balanceAmount.toFixed(2)}
+                      <strong>Balance:</strong> ₹{(Number(selectedInvoice.balanceAmount) || 0).toFixed(2)}
                     </Typography>
                   </Box>
 
@@ -403,13 +401,15 @@ const BillPayment = () => {
                   <strong>Supplier:</strong> {createdPayment.supplierName}
                 </Typography>
                 <Typography variant="body2">
-                  <strong>Amount:</strong> ₹{createdPayment.adjustAmount?.toFixed(2)}
+                  <strong>Amount:</strong> ₹{(Number(createdPayment.amount) || 0).toFixed(2)}
                 </Typography>
                 <Typography variant="body2">
-                  <strong>Date:</strong> {new Date(createdPayment.paymentDate).toLocaleDateString()}
+                  <strong>Date:</strong> {(createdPayment.paymentDate || '')
+                    ? new Date(createdPayment.paymentDate).toLocaleDateString()
+                    : '-'}
                 </Typography>
                 <Typography variant="body2">
-                  <strong>Mode:</strong> {createdPayment.paymentMode}
+                  <strong>Mode:</strong> {createdPayment.paymentMethod || 'CASH'}
                 </Typography>
                 {createdPayment.referenceNo && (
                   <Typography variant="body2">

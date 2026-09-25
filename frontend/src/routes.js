@@ -64,6 +64,12 @@ export const ROUTES = {
   ACCOUNTS_RECEIPTS: '/accounts/receipts',
   ACCOUNTS_PAYMENTS: '/accounts/payments',
   ACCOUNTS_LEDGER: '/accounts/ledger',
+  ACCOUNTS_RECEIVABLES: '/accounts/receivables',
+  ACCOUNTS_PAYABLES: '/accounts/payables',
+  ACCOUNTS_CASHBOOK: '/accounts/cashbook',
+  ACCOUNTS_EXPENSES: '/accounts/expenses',
+  ACCOUNTS_VOUCHERS: '/accounts/vouchers',
+  ACCOUNTS_SUMMARY: '/accounts/summary',
   
   // Reports
   REPORTS_SALES: '/reports/sales',
