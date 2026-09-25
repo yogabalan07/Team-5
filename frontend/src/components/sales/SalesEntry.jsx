@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -47,6 +47,7 @@ import { itemService } from '../../services/itemService';
 const SalesEntry = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const location = useLocation();
   const isEdit = Boolean(id);
 
   const [invoice, setInvoice] = useState({
@@ -56,6 +57,8 @@ const SalesEntry = () => {
     paymentType: 'CASH',
     items: [],
     notes: '',
+    salesOrderId: '',
+    orderNumber: '',
   });
   const [customers, setCustomers] = useState([]);
   const [items, setItems] = useState([]);
@@ -72,9 +75,38 @@ const SalesEntry = () => {
     if (isEdit) {
       fetchInvoiceForEdit();
     } else {
-      fetchInitialData();
+      fetchInitialData().then(() => {
+        const state = location.state;
+        if (state && state.fromOrder) {
+          setInvoice((prev) => ({
+            ...prev,
+            customerId: state.customerId || '',
+            customer: state.customerId
+              ? { id: state.customerId, name: state.customerName, phone: state.customerPhone }
+              : null,
+            salesOrderId: state.salesOrderId || '',
+            orderNumber: state.orderNumber || '',
+            notes: state.orderNumber ? `Against Sales Order ${state.orderNumber}` : '',
+            items: (state.items || []).map((i) => ({
+              itemId: i.itemId || '',
+              itemName: i.itemName || '',
+              itemCode: i.itemCode || '',
+              quantity: Number(i.quantity) || 1,
+              unitPrice: Number(i.unitPrice) || 0,
+              discountPercent: Number(i.discountPercent) || 0,
+              taxPercent: Number(i.taxPercent) || 0,
+              totalAmount: Number(i.totalAmount) || 0,
+            })),
+          }));
+          if (state.orderNumber) {
+            toast.info(`Prefilled from Sales Order ${state.orderNumber}`);
+          }
+          window.history.replaceState({}, '');
+        }
+      });
     }
-  }, [id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, location.state]);
 
   const fetchInitialData = async () => {
     setLoadingData(true);
@@ -119,6 +151,8 @@ const SalesEntry = () => {
           totalAmount: item.totalAmount,
         })),
         notes: data.notes || '',
+        salesOrderId: data.salesOrderId || '',
+        orderNumber: data.orderNumber || '',
       });
       
       await fetchInitialData();
@@ -257,15 +291,22 @@ const SalesEntry = () => {
     const totals = calculateTotals();
     const requestData = {
       customerId: invoice.customerId,
+      customerName: invoice.customer?.name || '',
+      customerPhone: invoice.customer?.phone || '',
+      salesOrderId: invoice.salesOrderId || '',
+      orderNumber: invoice.orderNumber || '',
       invoiceDate: invoice.invoiceDate,
       paymentType: invoice.paymentType,
       notes: invoice.notes || '',
       items: invoice.items.map((item) => ({
         itemId: item.itemId,
+        itemName: item.itemName,
+        itemCode: item.itemCode,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         discountPercent: item.discountPercent || 0,
         taxPercent: item.taxPercent || 0,
+        totalAmount: item.totalAmount,
       })),
       totalAmount: totals.totalAmount,
       discountAmount: totals.totalDiscount,
@@ -301,6 +342,8 @@ const SalesEntry = () => {
           paymentType: 'CASH',
           items: [],
           notes: '',
+          salesOrderId: '',
+          orderNumber: '',
         });
       }
       

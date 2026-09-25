@@ -75,8 +75,12 @@ const menuItems = [
     icon: <ShoppingCart />,
     path: '/sales/list',
     subItems: [
-      { text: 'Sales Entry', path: '/sales/list' },
+      { text: 'Quotations', path: '/sales/quotations' },
+      { text: 'Sales Orders', path: '/sales/orders' },
+      { text: 'Deliveries', path: '/sales/deliveries' },
+      { text: 'Sales Invoices', path: '/sales/list' },
       { text: 'Sales Return', path: '/sales/return' },
+      { text: 'Credit Notes', path: '/sales/credit-notes' },
     ],
   },
   {

@@ -231,6 +231,24 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     // Sales
     // ------------------------------------------------------------------
+    match /salesQuotations/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow delete: if isAdmin();
+    }
+
+    match /salesOrders/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow delete: if isAdmin();
+    }
+
+    match /deliveries/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
     match /salesInvoices/{docId} {
       allow read: if isEnabled();
       allow create: if hasAny(['ADMIN', 'BILLING_CLERK']);
@@ -242,6 +260,12 @@ service cloud.firestore {
     match /salesReturns/{docId} {
       allow read: if isEnabled();
       allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow delete: if isAdmin();
+    }
+
+    match /creditNotes/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK', 'ACCOUNTS']);
       allow delete: if isAdmin();
     }
 

@@ -28,7 +28,17 @@ export const ROUTES = {
   
   // Sales
   SALES_ENTRY: '/sales/entry',
+  SALES_LIST: '/sales/list',
   SALES_INVOICE: '/sales/invoice/:id',
+  SALES_QUOTATIONS: '/sales/quotations',
+  SALES_QUOTATION_NEW: '/sales/quotations/new',
+  SALES_QUOTATION_EDIT: '/sales/quotations/edit/:id',
+  SALES_ORDERS: '/sales/orders',
+  SALES_ORDER_NEW: '/sales/orders/new',
+  SALES_ORDER_EDIT: '/sales/orders/edit/:id',
+  SALES_DELIVERIES: '/sales/deliveries',
+  SALES_CREDIT_NOTES: '/sales/credit-notes',
+  SALES_RETURN: '/sales/return',
   
   // Purchases
   PURCHASE_ORDER: '/purchases/order',

@@ -25,6 +25,12 @@ import SalesList from './components/sales/SalesList';
 import SalesReturn from './components/sales/SalesReturn';
 import SalesPrint from './components/sales/SalesPrint';
 import SalesInvoiceView from './components/sales/SalesInvoiceView';
+import SalesQuotationList from './components/sales/SalesQuotationList';
+import SalesQuotationForm from './components/sales/SalesQuotationForm';
+import SalesOrderList from './components/sales/SalesOrderList';
+import SalesOrderForm from './components/sales/SalesOrderForm';
+import DeliveryList from './components/sales/DeliveryList';
+import CreditNoteList from './components/sales/CreditNoteList';
 import PurchaseEntry from './components/purchases/PurchaseEntry';
 import PurchaseOrder from './components/purchases/PurchaseOrder';
 import PurchaseReturn from './components/purchases/PurchaseReturn';
@@ -109,6 +115,14 @@ function App() {
             <Route path="/items/price-lists" element={<PriceList />} />
             
             {/* ==================== SALES ROUTES ==================== */}
+            <Route path="/sales/quotations" element={<SalesQuotationList />} />
+            <Route path="/sales/quotations/new" element={<SalesQuotationForm />} />
+            <Route path="/sales/quotations/edit/:id" element={<SalesQuotationForm />} />
+            <Route path="/sales/orders" element={<SalesOrderList />} />
+            <Route path="/sales/orders/new" element={<SalesOrderForm />} />
+            <Route path="/sales/orders/edit/:id" element={<SalesOrderForm />} />
+            <Route path="/sales/deliveries" element={<DeliveryList />} />
+            <Route path="/sales/credit-notes" element={<CreditNoteList />} />
             <Route path="/sales/entry" element={<SalesEntry />} />
             <Route path="/sales/edit/:id" element={<SalesEntry />} />
             <Route path="/sales/list" element={<SalesList />} />
