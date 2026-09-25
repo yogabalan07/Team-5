@@ -71,6 +71,16 @@ const menuItems = [
     ],
   },
   {
+    text: 'Inventory',
+    icon: <Inventory />,
+    path: '/inventory',
+    subItems: [
+      { text: 'Current Stock', path: '/inventory' },
+      { text: 'Low / Out of Stock', path: '/inventory/low-stock' },
+      { text: 'Stock Ledger', path: '/inventory/ledger' },
+    ],
+  },
+  {
     text: 'Sales',
     icon: <ShoppingCart />,
     path: '/sales/list',

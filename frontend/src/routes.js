@@ -49,6 +49,11 @@ export const ROUTES = {
   PURCHASE_GRN: '/purchases/grn',
   PURCHASE_DEBIT_NOTES: '/purchases/debit-notes',
   
+  // Inventory
+  INVENTORY: '/inventory',
+  INVENTORY_LOW_STOCK: '/inventory/low-stock',
+  INVENTORY_LEDGER: '/inventory/ledger',
+
   // Accounts
   ACCOUNTS_RECEIPTS: '/accounts/receipts',
   ACCOUNTS_PAYMENTS: '/accounts/payments',

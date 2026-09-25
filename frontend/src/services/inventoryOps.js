@@ -23,16 +23,22 @@ export const TYPE_PURCHASE = 'PURCHASE';
 export const TYPE_SALES_RETURN = 'SALES_RETURN';
 export const TYPE_PURCHASE_RETURN = 'PURCHASE_RETURN';
 export const TYPE_ADJUSTMENT = 'ADJUSTMENT';
+export const TYPE_STOCK_IN = 'STOCK_IN';
+export const TYPE_STOCK_OUT = 'STOCK_OUT';
 
 // Maps the service-level transaction types onto the ledger semantics used by
 // businessLogic.applyStock:
 //   SALES / PURCHASE_RETURN reduce stock, PURCHASE / SALES_RETURN increase it.
+//   STOCK_IN increases (opening stock, found stock, manual receipts),
+//   STOCK_OUT reduces with a negative-stock guard (damaged, expired, write-off).
 const TYPE_TO_STOCK_MOVE = {
   [TYPE_SALES]: 'SALES',
   [TYPE_PURCHASE]: 'PURCHASE',
   [TYPE_SALES_RETURN]: 'RETURN_IN',
   [TYPE_PURCHASE_RETURN]: 'RETURN_OUT',
   [TYPE_ADJUSTMENT]: 'ADJUSTMENT',
+  [TYPE_STOCK_IN]: 'PURCHASE',
+  [TYPE_STOCK_OUT]: 'RETURN_OUT',
 };
 
 function actorName() {
@@ -76,6 +82,7 @@ export async function applyStockLine(tx, {
   type,
   referenceNumber = '',
   referenceId = '',
+  reason = '',
 }) {
   const quantity = Number(qty) || 0;
   if (!itemId || quantity <= 0) return { itemId, quantity: 0 };
@@ -119,7 +126,9 @@ export async function applyStockLine(tx, {
   tx.set(journalRef, {
     type,
     sign,
-    quantity,
+    // For absolute ADJUSTMENT writes record the actual delta, not the target.
+    quantity: type === TYPE_ADJUSTMENT ? round2(move.newStock - current) : quantity,
+    reason,
     itemId: String(itemId),
     itemName: item.name || itemName,
     itemCode: item.itemCode || itemCode,

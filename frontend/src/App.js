@@ -41,6 +41,8 @@ import GRNVerification from './components/purchases/GRNVerification';
 import PurchaseRequisitionList from './components/purchases/PurchaseRequisitionList';
 import SupplierQuotationList from './components/purchases/SupplierQuotationList';
 import DebitNoteList from './components/purchases/DebitNoteList';
+import CurrentStock from './components/inventory/CurrentStock';
+import StockLedger from './components/inventory/StockLedger';
 import BillReceipt from './components/accounts/BillReceipt';
 import BillPayment from './components/accounts/BillPayment';
 import LedgerView from './components/accounts/LedgerView';
@@ -148,6 +150,11 @@ function App() {
             <Route path="/purchases/grn" element={<GRNVerification />} />
             <Route path="/purchases/debit-notes" element={<DebitNoteList />} />
             
+            {/* ==================== INVENTORY ROUTES ==================== */}
+            <Route path="/inventory" element={<CurrentStock />} />
+            <Route path="/inventory/low-stock" element={<CurrentStock />} />
+            <Route path="/inventory/ledger" element={<StockLedger />} />
+
             {/* ==================== ACCOUNTS ROUTES ==================== */}
             <Route path="/accounts/receipts" element={<BillReceipt />} />
             <Route path="/accounts/payments" element={<BillPayment />} />
