@@ -326,5 +326,32 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if isAdmin();
     }
+
+    // ------------------------------------------------------------------
+    // Warehouses & stock transfers
+    // ------------------------------------------------------------------
+    match /warehouses/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /warehouseLocations/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /warehouseStock/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER', 'BILLING_CLERK', 'PURCHASE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /stockTransfers/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
   }
 }

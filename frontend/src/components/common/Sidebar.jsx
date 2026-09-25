@@ -26,6 +26,7 @@ import {
   ExpandLess,
   ExpandMore,
   AdminPanelSettings,
+  Warehouse,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
 
@@ -78,6 +79,17 @@ const menuItems = [
       { text: 'Current Stock', path: '/inventory' },
       { text: 'Low / Out of Stock', path: '/inventory/low-stock' },
       { text: 'Stock Ledger', path: '/inventory/ledger' },
+      { text: 'Stock Transfers', path: '/inventory/transfers' },
+    ],
+  },
+  {
+    text: 'Warehouses',
+    icon: <Warehouse />,
+    path: '/warehouses',
+    subItems: [
+      { text: 'All Warehouses', path: '/warehouses' },
+      { text: 'Locations', path: '/warehouses/locations' },
+      { text: 'Warehouse Stock', path: '/warehouses/stock' },
     ],
   },
   {

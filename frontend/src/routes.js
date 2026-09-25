@@ -53,6 +53,12 @@ export const ROUTES = {
   INVENTORY: '/inventory',
   INVENTORY_LOW_STOCK: '/inventory/low-stock',
   INVENTORY_LEDGER: '/inventory/ledger',
+  INVENTORY_TRANSFERS: '/inventory/transfers',
+
+  // Warehouses
+  WAREHOUSES: '/warehouses',
+  WAREHOUSE_LOCATIONS: '/warehouses/locations',
+  WAREHOUSE_STOCK: '/warehouses/stock',
 
   // Accounts
   ACCOUNTS_RECEIPTS: '/accounts/receipts',

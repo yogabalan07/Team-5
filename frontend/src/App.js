@@ -43,6 +43,10 @@ import SupplierQuotationList from './components/purchases/SupplierQuotationList'
 import DebitNoteList from './components/purchases/DebitNoteList';
 import CurrentStock from './components/inventory/CurrentStock';
 import StockLedger from './components/inventory/StockLedger';
+import StockTransferList from './components/inventory/StockTransferList';
+import WarehouseList from './components/warehouses/WarehouseList';
+import LocationList from './components/warehouses/LocationList';
+import WarehouseStockView from './components/warehouses/WarehouseStockView';
 import BillReceipt from './components/accounts/BillReceipt';
 import BillPayment from './components/accounts/BillPayment';
 import LedgerView from './components/accounts/LedgerView';
@@ -154,6 +158,12 @@ function App() {
             <Route path="/inventory" element={<CurrentStock />} />
             <Route path="/inventory/low-stock" element={<CurrentStock />} />
             <Route path="/inventory/ledger" element={<StockLedger />} />
+            <Route path="/inventory/transfers" element={<StockTransferList />} />
+
+            {/* ==================== WAREHOUSE ROUTES ==================== */}
+            <Route path="/warehouses" element={<WarehouseList />} />
+            <Route path="/warehouses/locations" element={<LocationList />} />
+            <Route path="/warehouses/stock" element={<WarehouseStockView />} />
 
             {/* ==================== ACCOUNTS ROUTES ==================== */}
             <Route path="/accounts/receipts" element={<BillReceipt />} />

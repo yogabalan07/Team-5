@@ -39,9 +39,12 @@ const TYPE_COLORS = {
   PURCHASE: 'success',
   SALES_RETURN: 'info',
   PURCHASE_RETURN: 'warning',
+  RETURN_IN: 'info',
+  RETURN_OUT: 'warning',
   ADJUSTMENT: 'primary',
   STOCK_IN: 'success',
   STOCK_OUT: 'error',
+  WAREHOUSE_TRANSFER: 'secondary',
 };
 
 const StockLedger = () => {
