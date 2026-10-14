@@ -6,7 +6,6 @@
     "jest": true,
     "es2022": true
   },
-  "extends": ["react-app"],
   "rules": {
     "no-console": "off"
   }

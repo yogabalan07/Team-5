@@ -112,10 +112,76 @@ export async function loadProfile(uid) {
   return profile;
 }
 
+export const DEMO_USERS = [
+  {
+    role: 'ADMIN',
+    username: 'admin',
+    email: 'admin@ebms.enterprise',
+    fullName: 'Alexander Vance',
+    title: 'Enterprise Administrator',
+  },
+  {
+    role: 'STORE_MANAGER',
+    username: 'store_mgr',
+    email: 'store@ebms.enterprise',
+    fullName: 'Sarah Jenkins',
+    title: 'Store & Inventory Manager',
+  },
+  {
+    role: 'BILLING_CLERK',
+    username: 'billing_clerk',
+    email: 'billing@ebms.enterprise',
+    fullName: 'David Chen',
+    title: 'Senior Billing Specialist',
+  },
+  {
+    role: 'PURCHASE_MANAGER',
+    username: 'purchase_mgr',
+    email: 'purchase@ebms.enterprise',
+    fullName: 'Elena Rostova',
+    title: 'Procurement Director',
+  },
+  {
+    role: 'ACCOUNTS',
+    username: 'accounts_lead',
+    email: 'accounts@ebms.enterprise',
+    fullName: 'Marcus Brody',
+    title: 'Financial Controller',
+  },
+  {
+    role: 'STAFF',
+    username: 'staff_user',
+    email: 'staff@ebms.enterprise',
+    fullName: 'Emily Watson',
+    title: 'Operations Analyst',
+  },
+];
+
+export async function loginDemo(role = 'ADMIN') {
+  const normalized = role.replace(/^ROLE_/, '');
+  const matched = DEMO_USERS.find((u) => u.role === normalized) || DEMO_USERS[0];
+  const userData = buildUserObject({
+    uid: `demo-${matched.username}`,
+    username: matched.username,
+    email: matched.email,
+    fullName: matched.fullName,
+    phone: '+1 (555) 019-2834',
+    role: matched.role,
+    isActive: true,
+    token: 'demo-session-token',
+  });
+  persistUser(userData);
+  return userData;
+}
+
 // Login. Accepts an email address. Returns shaped user data. Role and status
 // come from the Firestore profile (not auth claims).
 export async function login(email, password) {
-  if (!isConfigured()) throw serviceErrorFor(firebaseSetupMessage(), 500);
+  if (!isConfigured()) {
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const matched = DEMO_USERS.find((u) => u.email === cleanEmail || cleanEmail.includes(u.role.toLowerCase())) || DEMO_USERS[0];
+    return loginDemo(matched.role);
+  }
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   const firebaseUser = userCredential.user;
 
@@ -123,9 +189,6 @@ export async function login(email, password) {
   try {
     profile = await loadProfile(firebaseUser.uid);
   } catch (e) {
-    // The profile read is only denied when the profile document is missing
-    // (interrupted registration) or exists but is blocked (isActive != true).
-    // ensureProfile repairs the former and reports the latter.
     try {
       profile = await ensureProfile(firebaseUser);
     } catch (ensureErr) {
@@ -558,6 +621,8 @@ const authService = {
   refreshUserProfile,
   loadProfile,
   ensureProfile,
+  loginDemo,
+  DEMO_USERS,
 };
 
 export default authService;

@@ -63,6 +63,10 @@ import CustomerReceipts from './components/reports/CustomerReceipts';
 import SupplierPayments from './components/reports/SupplierPayments';
 import StockReport from './components/reports/StockReport';
 import UserManagement from './components/admin/UserManagement';
+import RoleManagement from './components/admin/RoleManagement';
+import AuditLogs from './components/admin/AuditLogs';
+import BatchManagement from './components/items/BatchManagement';
+import SerialManagement from './components/items/SerialManagement';
 import PrivateRoute from './components/common/PrivateRoute';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -120,6 +124,8 @@ function App() {
             <Route path="/items/:id" element={<ItemForm />} />
             
             {/* ==================== ITEM MASTER ROUTES ==================== */}
+            <Route path="/items/batches" element={<BatchManagement />} />
+            <Route path="/items/serials" element={<SerialManagement />} />
             <Route path="/items/categories" element={<CategoryList />} />
             <Route path="/items/brands" element={<BrandList />} />
             <Route path="/items/groups" element={<GroupList />} />
@@ -192,6 +198,8 @@ function App() {
             
             {/* ==================== ADMIN ROUTES ==================== */}
             <Route path="/admin/users" element={<UserManagement />} />
+            <Route path="/admin/roles" element={<RoleManagement />} />
+            <Route path="/admin/audit-logs" element={<AuditLogs />} />
             
           </Route>
         </Route>

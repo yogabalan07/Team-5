@@ -25,6 +25,8 @@ export const ROUTES = {
   ITEM_UNITS: '/items/units',
   ITEM_TAXES: '/items/taxes',
   ITEM_PRICELISTS: '/items/price-lists',
+  ITEM_BATCHES: '/items/batches',
+  ITEM_SERIALS: '/items/serials',
   
   // Sales
   SALES_ENTRY: '/sales/entry',
@@ -74,4 +76,9 @@ export const ROUTES = {
   // Reports
   REPORTS_SALES: '/reports/sales',
   REPORTS_STOCK: '/reports/stock',
+
+  // Administration
+  ADMIN_USERS: '/admin/users',
+  ADMIN_ROLES: '/admin/roles',
+  ADMIN_AUDIT_LOGS: '/admin/audit-logs',
 };

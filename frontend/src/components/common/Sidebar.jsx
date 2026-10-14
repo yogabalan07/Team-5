@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Drawer,
   List,
-  ListItem,
+  ListItemButton,
   ListItemIcon,
   ListItemText,
   Toolbar,
@@ -12,381 +12,375 @@ import {
   Collapse,
   Avatar,
   Chip,
+  Tooltip,
+  Divider,
 } from '@mui/material';
 import {
-  Dashboard,
-  People,
-  LocalShipping,
-  Inventory,
-  ShoppingCart,
-  Storefront,
-  AccountBalance,
-  BarChart,
-  Settings,
+  Dashboard as DashboardIcon,
+  People as PeopleIcon,
+  LocalShipping as SupplierIcon,
+  Inventory as InventoryIcon,
+  ShoppingCart as SalesIcon,
+  ReceiptLong as PurchaseIcon,
+  AccountBalance as FinanceIcon,
+  BarChart as ReportsIcon,
+  AdminPanelSettings as AdminIcon,
+  Warehouse as WarehouseIcon,
   ExpandLess,
   ExpandMore,
-  AdminPanelSettings,
-  Warehouse,
+  QrCode,
+  Security,
+  History,
+  PriceChange,
+  FolderSpecial,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 
-const drawerWidth = 260;
+const EXPANDED_WIDTH = 260;
+const COLLAPSED_WIDTH = 72;
 
-const menuItems = [
+const NAV_MODULES = [
   {
-    text: 'Dashboard',
-    icon: <Dashboard />,
+    title: 'Dashboard',
+    icon: <DashboardIcon fontSize="small" />,
     path: '/dashboard',
+    allowedRoles: ['ADMIN', 'STORE_MANAGER', 'BILLING_CLERK', 'PURCHASE_MANAGER', 'ACCOUNTS', 'STAFF'],
   },
   {
-    text: 'Customers',
-    icon: <People />,
-    path: '/customers',
+    title: 'Administration',
+    icon: <AdminIcon fontSize="small" />,
+    path: '/admin',
+    allowedRoles: ['ADMIN'],
     subItems: [
-      { text: 'All Customers', path: '/customers' },
-      { text: 'Customer Groups', path: '/customers/groups' },
+      { text: 'User Accounts', path: '/admin/users' },
+      { text: 'Roles & Permissions', path: '/admin/roles' },
+      { text: 'Audit Trail Logs', path: '/admin/audit-logs' },
     ],
   },
   {
-    text: 'Suppliers',
-    icon: <LocalShipping />,
-    path: '/suppliers',
-    subItems: [
-      { text: 'All Suppliers', path: '/suppliers' },
-      { text: 'Supplier Groups', path: '/suppliers/groups' },
-    ],
-  },
-  {
-    text: 'Items',
-    icon: <Inventory />,
+    title: 'Product Master Data',
+    icon: <InventoryIcon fontSize="small" />,
     path: '/items',
+    allowedRoles: ['ADMIN', 'STORE_MANAGER', 'PURCHASE_MANAGER', 'STAFF'],
     subItems: [
-      { text: 'All Items', path: '/items' },
+      { text: 'All Catalog Items', path: '/items' },
+      { text: 'Batch Tracking', path: '/items/batches' },
+      { text: 'Serial Numbers', path: '/items/serials' },
       { text: 'Categories', path: '/items/categories' },
       { text: 'Brands', path: '/items/brands' },
-      { text: 'Groups', path: '/items/groups' },
+      { text: 'Item Groups', path: '/items/groups' },
       { text: 'Sections', path: '/items/sections' },
-      { text: 'Units', path: '/items/units' },
-      { text: 'Taxes', path: '/items/taxes' },
+      { text: 'Measurement Units', path: '/items/units' },
+      { text: 'Tax / GST Rates', path: '/items/taxes' },
       { text: 'Price Lists', path: '/items/price-lists' },
     ],
   },
   {
-    text: 'Inventory',
-    icon: <Inventory />,
-    path: '/inventory',
+    title: 'Customer Relations',
+    icon: <PeopleIcon fontSize="small" />,
+    path: '/customers',
+    allowedRoles: ['ADMIN', 'BILLING_CLERK', 'ACCOUNTS', 'STAFF'],
     subItems: [
-      { text: 'Current Stock', path: '/inventory' },
-      { text: 'Low / Out of Stock', path: '/inventory/low-stock' },
-      { text: 'Stock Ledger', path: '/inventory/ledger' },
-      { text: 'Stock Transfers', path: '/inventory/transfers' },
+      { text: 'Customer Directory', path: '/customers' },
+      { text: 'Customer Groups', path: '/customers/groups' },
     ],
   },
   {
-    text: 'Warehouses',
-    icon: <Warehouse />,
-    path: '/warehouses',
+    title: 'Supplier Network',
+    icon: <SupplierIcon fontSize="small" />,
+    path: '/suppliers',
+    allowedRoles: ['ADMIN', 'PURCHASE_MANAGER', 'ACCOUNTS', 'STAFF'],
     subItems: [
-      { text: 'All Warehouses', path: '/warehouses' },
-      { text: 'Locations', path: '/warehouses/locations' },
-      { text: 'Warehouse Stock', path: '/warehouses/stock' },
+      { text: 'Supplier Accounts', path: '/suppliers' },
+      { text: 'Supplier Groups', path: '/suppliers/groups' },
     ],
   },
   {
-    text: 'Sales',
-    icon: <ShoppingCart />,
-    path: '/sales/list',
+    title: 'Sales & Billing',
+    icon: <SalesIcon fontSize="small" />,
+    path: '/sales',
+    allowedRoles: ['ADMIN', 'BILLING_CLERK', 'STORE_MANAGER', 'STAFF'],
     subItems: [
+      { text: 'Sales Invoices', path: '/sales/list' },
+      { text: 'New Sales Invoice', path: '/sales/entry' },
       { text: 'Quotations', path: '/sales/quotations' },
       { text: 'Sales Orders', path: '/sales/orders' },
-      { text: 'Deliveries', path: '/sales/deliveries' },
-      { text: 'Sales Invoices', path: '/sales/list' },
-      { text: 'Sales Return', path: '/sales/return' },
+      { text: 'Deliveries & Dispatches', path: '/sales/deliveries' },
       { text: 'Credit Notes', path: '/sales/credit-notes' },
+      { text: 'Sales Returns', path: '/sales/return' },
     ],
   },
   {
-    text: 'Purchases',
-    icon: <Storefront />,
-    path: '/purchases/list',
+    title: 'Purchases & Procurement',
+    icon: <PurchaseIcon fontSize="small" />,
+    path: '/purchases',
+    allowedRoles: ['ADMIN', 'PURCHASE_MANAGER', 'STORE_MANAGER', 'STAFF'],
     subItems: [
-      { text: 'Requisitions', path: '/purchases/requisitions' },
-      { text: 'Supplier Quotes', path: '/purchases/quotations' },
+      { text: 'Purchase Invoices', path: '/purchases/list' },
+      { text: 'New Purchase Entry', path: '/purchases/entry' },
       { text: 'Purchase Orders', path: '/purchases/orders' },
-      { text: 'Purchase Entry', path: '/purchases/list' },
-      { text: 'Purchase Return', path: '/purchases/return' },
-      { text: 'GRN Verification', path: '/purchases/grn' },
+      { text: 'Requisitions (PR)', path: '/purchases/requisitions' },
+      { text: 'Supplier RFQ Quotations', path: '/purchases/quotations' },
+      { text: 'Goods Received (GRN)', path: '/purchases/grn' },
       { text: 'Debit Notes', path: '/purchases/debit-notes' },
+      { text: 'Purchase Returns', path: '/purchases/return' },
     ],
   },
   {
-    text: 'Accounts',
-    icon: <AccountBalance />,
-    path: '/accounts/ledger',
+    title: 'Warehouses & Stock',
+    icon: <WarehouseIcon fontSize="small" />,
+    path: '/inventory',
+    allowedRoles: ['ADMIN', 'STORE_MANAGER', 'PURCHASE_MANAGER', 'STAFF'],
     subItems: [
-      { text: 'Financial Summary', path: '/accounts/summary' },
+      { text: 'Current Stock Balances', path: '/inventory' },
+      { text: 'Low & Out of Stock', path: '/inventory/low-stock' },
+      { text: 'Stock Movements Ledger', path: '/inventory/ledger' },
+      { text: 'Warehouse Transfers', path: '/inventory/transfers' },
+      { text: 'Warehouses', path: '/warehouses' },
+      { text: 'Storage Bin Locations', path: '/warehouses/locations' },
+      { text: 'Warehouse Stock View', path: '/warehouses/stock' },
+    ],
+  },
+  {
+    title: 'Financial Ledger',
+    icon: <FinanceIcon fontSize="small" />,
+    path: '/accounts',
+    allowedRoles: ['ADMIN', 'ACCOUNTS', 'BILLING_CLERK'],
+    subItems: [
+      { text: 'Receivables (AR)', path: '/accounts/receivables' },
+      { text: 'Payables (AP)', path: '/accounts/payables' },
       { text: 'Bill Receipts', path: '/accounts/receipts' },
       { text: 'Bill Payments', path: '/accounts/payments' },
-      { text: 'Receivables', path: '/accounts/receivables' },
-      { text: 'Payables', path: '/accounts/payables' },
-      { text: 'Cash & Bank Book', path: '/accounts/cashbook' },
-      { text: 'Expenses', path: '/accounts/expenses' },
+      { text: 'General Ledger', path: '/accounts/ledger' },
+      { text: 'Daily Cashbook', path: '/accounts/cashbook' },
+      { text: 'Operational Expenses', path: '/accounts/expenses' },
       { text: 'Payment Vouchers', path: '/accounts/vouchers' },
-      { text: 'Ledger', path: '/accounts/ledger' },
+      { text: 'Financial Statement', path: '/accounts/summary' },
     ],
   },
   {
-    text: 'Reports',
-    icon: <BarChart />,
-    path: '/reports/sales',
+    title: 'Reports & Analytics',
+    icon: <ReportsIcon fontSize="small" />,
+    path: '/reports',
+    allowedRoles: ['ADMIN', 'STORE_MANAGER', 'PURCHASE_MANAGER', 'BILLING_CLERK', 'ACCOUNTS', 'STAFF'],
     subItems: [
-      { text: 'Sales Bills Report', path: '/reports/sales' },
-      { text: 'Sales Bills Details', path: '/reports/sales-details' },
-      { text: 'Purchase Bills Report', path: '/reports/purchases' },
-      { text: 'Purchase Bills Details', path: '/reports/purchase-details' },
-      { text: 'Customer Receipts', path: '/reports/customer-receipts' },
-      { text: 'Supplier Payments', path: '/reports/supplier-payments' },
-      { text: 'Stock Report', path: '/reports/stock' },
+      { text: 'Sales Performance', path: '/reports/sales' },
+      { text: 'Sales Line Details', path: '/reports/sales-details' },
+      { text: 'Procurement Report', path: '/reports/purchases' },
+      { text: 'Purchase Line Details', path: '/reports/purchase-details' },
+      { text: 'Stock Valuation', path: '/reports/stock' },
+      { text: 'Customer Collections', path: '/reports/customer-receipts' },
+      { text: 'Supplier Disbursements', path: '/reports/supplier-payments' },
     ],
   },
-  {
-    text: 'Admin',
-    icon: <AdminPanelSettings />,
-    path: '/admin/users',
-    subItems: [
-      { text: 'User Management', path: '/admin/users' },
-    ],
-  },
-  
 ];
 
 const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAdmin } = useAuth();
-  const [openSubMenus, setOpenSubMenus] = useState({
-    Customers: false,
-    Suppliers: false,
-    Items: false,
-    Sales: false,
-    Purchases: false,
-    Accounts: false,
-    Reports: false,
-    Admin: false,
+  const { user } = useAuth();
+  const { sidebarCollapsed } = useApp();
+
+  const [openSections, setOpenSections] = useState(() => {
+    // Automatically open active module on load
+    const activeModule = NAV_MODULES.find(
+      (m) => m.subItems && m.subItems.some((s) => location.pathname.startsWith(s.path))
+    );
+    return activeModule ? { [activeModule.title]: true } : { 'Product Master Data': true };
   });
 
-  // Filter menu items based on user role
-  const filteredMenuItems = menuItems.filter((item) => {
-    // Only show Admin menu if user is admin
-    if (item.text === 'Admin') {
-      return isAdmin();
-    }
-    return true;
-  });
+  const userRole = (user?.role || 'ADMIN').replace(/^ROLE_/, '');
 
-  const handleSubMenuToggle = (text) => {
-    setOpenSubMenus((prev) => ({
+  const handleToggleSection = (title) => {
+    if (sidebarCollapsed) return;
+    setOpenSections((prev) => ({
       ...prev,
-      [text]: !prev[text],
+      [title]: !prev[title],
     }));
   };
 
-  const isActive = (path) => {
-    return location.pathname === path || location.pathname.startsWith(path + '/');
+  const isRouteActive = (path) => {
+    if (path === '/dashboard') return location.pathname === '/dashboard' || location.pathname === '/';
+    return location.pathname.startsWith(path);
   };
 
-  const isSubItemActive = (subItems) => {
-    return subItems?.some((sub) => location.pathname === sub.path);
-  };
-
-  const handleNavigation = (path) => {
-    navigate(path);
-    if (mobileOpen) handleDrawerToggle();
-  };
-
-  const drawer = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <Toolbar
+  const drawerContent = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Brand Header */}
+      <Box
         sx={{
-          backgroundColor: '#1976d2',
-          minHeight: 64,
-          px: 2,
+          height: 60,
+          display: 'flex',
+          alignItems: 'center',
+          px: sidebarCollapsed ? 1.5 : 2.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          gap: 1.5,
         }}
       >
-        <Typography variant="h6" sx={{ color: 'white', fontWeight: 700 }}>
-          📦 Inventory Pro
-        </Typography>
-      </Toolbar>
-
-      {/* User Info */}
-      <Box sx={{ p: 2, bgcolor: '#f5f7fa', borderBottom: '1px solid #e0e0e0' }}>
-        <Box display="flex" alignItems="center" gap={2}>
-          <Avatar sx={{ bgcolor: '#1976d2' }}>
-            {user?.fullName?.charAt(0) || user?.username?.charAt(0) || 'U'}
-          </Avatar>
-          <Box>
-            <Typography variant="body2" fontWeight={600}>
-              {user?.fullName || user?.username || 'User'}
+        <Avatar
+          variant="rounded"
+          sx={{
+            bgcolor: 'primary.main',
+            color: '#fff',
+            width: 32,
+            height: 32,
+            fontSize: '0.9rem',
+            fontWeight: 800,
+            borderRadius: 1.5,
+          }}
+        >
+          E
+        </Avatar>
+        {!sidebarCollapsed && (
+          <Box sx={{ overflow: 'hidden' }}>
+            <Typography variant="subtitle1" fontWeight={800} sx={{ lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+              EBMS
             </Typography>
-            <Box display="flex" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>
-              {user?.roles?.map((role) => (
-                <Chip
-                  key={role.id}
-                  label={role.name.replace('ROLE_', '')}
-                  size="small"
-                  color={role.name === 'ROLE_ADMIN' ? 'error' : 'primary'}
-                  sx={{ height: 20, fontSize: '0.625rem' }}
-                />
-              ))}
-            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem', display: 'block' }}>
+              Enterprise Operations
+            </Typography>
           </Box>
-        </Box>
+        )}
       </Box>
 
-      {/* Menu */}
-      <Box sx={{ flexGrow: 1, overflow: 'auto', pt: 1 }}>
-        <List>
-          {filteredMenuItems.map((item) => {
-            const isItemActive =
-              isActive(item.path) || isSubItemActive(item.subItems);
-            const hasSubItems = item.subItems && item.subItems.length > 0;
+      {/* Nav List */}
+      <Box sx={{ flexGrow: 1, overflowY: 'auto', py: 1.5, px: sidebarCollapsed ? 1 : 1.5 }}>
+        <List dense disablePadding>
+          {NAV_MODULES.map((module) => {
+            // Role filter check
+            if (module.allowedRoles && !module.allowedRoles.includes(userRole) && userRole !== 'ADMIN') {
+              return null;
+            }
+
+            const hasSub = Boolean(module.subItems && module.subItems.length > 0);
+            const isOpen = Boolean(openSections[module.title]);
+            const isActive = isRouteActive(module.path);
 
             return (
-              <React.Fragment key={item.text}>
-                <ListItem
-                  button
-                  onClick={() => {
-                    if (hasSubItems) {
-                      handleSubMenuToggle(item.text);
-                    } else {
-                      handleNavigation(item.path);
-                    }
-                  }}
-                  sx={{
-                    mx: 1,
-                    borderRadius: 2,
-                    mb: 0.5,
-                    backgroundColor: isItemActive ? '#1976d2' : 'transparent',
-                    color: isItemActive ? 'white' : 'inherit',
-                    '&:hover': {
-                      backgroundColor: isItemActive ? '#1565c0' : '#e3f2fd',
-                    },
-                  }}
-                >
-                  <ListItemIcon
+              <Box key={module.title} sx={{ mb: 0.5 }}>
+                <Tooltip title={sidebarCollapsed ? module.title : ''} placement="right" arrow>
+                  <ListItemButton
+                    onClick={() => {
+                      if (hasSub) {
+                        handleToggleSection(module.title);
+                      } else {
+                        navigate(module.path);
+                        if (mobileOpen) handleDrawerToggle();
+                      }
+                    }}
                     sx={{
-                      color: isItemActive ? 'white' : '#1976d2',
-                      minWidth: 40,
+                      borderRadius: 1.5,
+                      py: 0.8,
+                      px: sidebarCollapsed ? 1.2 : 1.5,
+                      justifyContent: sidebarCollapsed ? 'center' : 'initial',
+                      bgcolor: isActive && !hasSub ? 'action.selected' : 'transparent',
+                      color: isActive ? 'primary.main' : 'text.primary',
+                      fontWeight: isActive ? 600 : 500,
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                      },
                     }}
                   >
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={item.text}
-                    primaryTypographyProps={{
-                      fontWeight: isItemActive ? 600 : 400,
-                      fontSize: '0.9rem',
-                    }}
-                  />
-                  {hasSubItems &&
-                    (openSubMenus[item.text] ? <ExpandLess /> : <ExpandMore />)}
-                </ListItem>
+                    <ListItemIcon
+                      sx={{
+                        minWidth: sidebarCollapsed ? 0 : 32,
+                        mr: sidebarCollapsed ? 0 : 1,
+                        justifyContent: 'center',
+                        color: isActive ? 'primary.main' : 'text.secondary',
+                      }}
+                    >
+                      {module.icon}
+                    </ListItemIcon>
 
-                {hasSubItems && (
-                  <Collapse
-                    in={openSubMenus[item.text]}
-                    timeout="auto"
-                    unmountOnExit
-                  >
-                    <List component="div" disablePadding>
-                      {item.subItems.map((subItem) => (
-                        <ListItem
-                          button
-                          key={subItem.text}
-                          onClick={() => handleNavigation(subItem.path)}
-                          sx={{
-                            pl: 4,
-                            mx: 1,
-                            borderRadius: 2,
-                            mb: 0.5,
-                            backgroundColor: isActive(subItem.path)
-                              ? '#e3f2fd'
-                              : 'transparent',
-                            '&:hover': {
-                              backgroundColor: '#f5f7fa',
-                            },
+                    {!sidebarCollapsed && (
+                      <>
+                        <ListItemText
+                          primary={module.title}
+                          primaryTypographyProps={{
+                            fontSize: '0.825rem',
+                            fontWeight: isActive ? 600 : 500,
+                            noWrap: true,
                           }}
-                        >
-                          <ListItemText
-                            primary={subItem.text}
-                            primaryTypographyProps={{
-                              fontSize: '0.85rem',
-                              fontWeight: isActive(subItem.path) ? 500 : 400,
-                              color: isActive(subItem.path)
-                                ? '#1976d2'
-                                : 'inherit',
+                        />
+                        {hasSub && (
+                          isOpen ? <ExpandLess fontSize="small" sx={{ color: 'text.disabled' }} /> : <ExpandMore fontSize="small" sx={{ color: 'text.disabled' }} />
+                        )}
+                      </>
+                    )}
+                  </ListItemButton>
+                </Tooltip>
+
+                {/* Sub-menu items */}
+                {hasSub && !sidebarCollapsed && (
+                  <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                    <List dense disablePadding sx={{ pl: 3.5, mt: 0.3, mb: 0.8 }}>
+                      {module.subItems.map((sub) => {
+                        const isSubActive = location.pathname === sub.path;
+
+                        return (
+                          <ListItemButton
+                            key={sub.path}
+                            onClick={() => {
+                              navigate(sub.path);
+                              if (mobileOpen) handleDrawerToggle();
                             }}
-                          />
-                          {isActive(subItem.path) && (
-                            <Box
-                              sx={{
-                                width: 6,
-                                height: 6,
-                                borderRadius: '50%',
-                                bgcolor: '#1976d2',
+                            sx={{
+                              borderRadius: 1,
+                              py: 0.5,
+                              px: 1.5,
+                              mb: 0.2,
+                              bgcolor: isSubActive ? 'primary.main' : 'transparent',
+                              color: isSubActive ? '#ffffff' : 'text.secondary',
+                              '&:hover': {
+                                bgcolor: isSubActive ? 'primary.dark' : 'action.hover',
+                                color: isSubActive ? '#ffffff' : 'text.primary',
+                              },
+                            }}
+                          >
+                            <ListItemText
+                              primary={sub.text}
+                              primaryTypographyProps={{
+                                fontSize: '0.775rem',
+                                fontWeight: isSubActive ? 600 : 400,
+                                noWrap: true,
                               }}
                             />
-                          )}
-                        </ListItem>
-                      ))}
+                          </ListItemButton>
+                        );
+                      })}
                     </List>
                   </Collapse>
                 )}
-              </React.Fragment>
+              </Box>
             );
           })}
         </List>
       </Box>
 
-      {/* Footer */}
+      {/* Footer System Status */}
       <Box
         sx={{
-          p: 2,
-          borderTop: '1px solid #e0e0e0',
-          bgcolor: '#f8f9fa',
-          mt: 'auto',
+          p: sidebarCollapsed ? 1 : 2,
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          textAlign: sidebarCollapsed ? 'center' : 'left',
         }}
       >
-        <Typography
-          variant="caption"
-          color="textSecondary"
-          display="block"
-          align="center"
-        >
-          Inventory Pro v1.0.0
-        </Typography>
-        <Typography
-          variant="caption"
-          color="textSecondary"
-          display="block"
-          align="center"
-        >
-          © {new Date().getFullYear()} All rights reserved
-        </Typography>
-        {isAdmin() && (
-          <Chip
-            label="🔑 Admin Access"
-            size="small"
-            color="error"
-            sx={{
-              mt: 1,
-              width: '100%',
-              height: 24,
-              fontSize: '0.65rem',
-              fontWeight: 600,
-            }}
-          />
+        {!sidebarCollapsed ? (
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
+              EBMS Platform v2.6
+            </Typography>
+            <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
+              Session: {userRole}
+            </Typography>
+          </Box>
+        ) : (
+          <Tooltip title={`Session: ${userRole}`}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main', mx: 'auto' }} />
+          </Tooltip>
         )}
       </Box>
     </Box>
@@ -395,7 +389,11 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
   return (
     <Box
       component="nav"
-      sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+      sx={{
+        width: { md: sidebarCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH },
+        flexShrink: { md: 0 },
+        transition: 'width 0.2s',
+      }}
     >
       {/* Mobile Drawer */}
       <Drawer
@@ -407,28 +405,28 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
           display: { xs: 'block', md: 'none' },
           '& .MuiDrawer-paper': {
             boxSizing: 'border-box',
-            width: drawerWidth,
+            width: EXPANDED_WIDTH,
           },
         }}
       >
-        {drawer}
+        {drawerContent}
       </Drawer>
 
-      {/* Desktop Drawer */}
+      {/* Desktop Permanent Drawer */}
       <Drawer
         variant="permanent"
         sx={{
           display: { xs: 'none', md: 'block' },
           '& .MuiDrawer-paper': {
             boxSizing: 'border-box',
-            width: drawerWidth,
-            borderRight: '1px solid #e0e0e0',
-            backgroundColor: '#ffffff',
+            width: sidebarCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH,
+            transition: 'width 0.2s',
+            overflowX: 'hidden',
           },
         }}
         open
       >
-        {drawer}
+        {drawerContent}
       </Drawer>
     </Box>
   );

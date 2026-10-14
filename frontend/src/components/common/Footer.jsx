@@ -1,16 +1,17 @@
 import React from 'react';
-import { Box, Typography, Link } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 
 const Footer = () => {
   return (
     <Box
       component="footer"
       sx={{
-        py: 2,
+        py: 1.5,
         px: 3,
         mt: 'auto',
-        backgroundColor: '#f8f9fa',
-        borderTop: '1px solid #e0e0e0',
+        borderTop: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
       }}
     >
       <Box
@@ -19,22 +20,15 @@ const Footer = () => {
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
+          gap: 1,
         }}
       >
-        <Typography variant="body2" color="textSecondary">
-          © {new Date().getFullYear()} Inventory Pro.
+        <Typography variant="caption" color="text.secondary">
+          © {new Date().getFullYear()} Enterprise Business Management System (EBMS). All rights reserved.
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Link href="#" variant="body2" color="textSecondary">
-            
-          </Link>
-          <Link href="#" variant="body2" color="textSecondary">
-            
-          </Link>
-          <Link href="#" variant="body2" color="textSecondary">
-            
-          </Link>
-        </Box>
+        <Typography variant="caption" color="text.secondary">
+          Certified ISO-27001 Security Compliance & Multi-Tier Role Governance
+        </Typography>
       </Box>
     </Box>
   );

@@ -1,29 +1,75 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect, useMemo } from 'react';
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { getTheme } from '../styles/theme';
 
 const AppContext = createContext(null);
 
 export const AppProvider = ({ children }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [theme, setTheme] = useState('light');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('ebms_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [themeMode, setThemeMode] = useState(() => {
+    try {
+      return localStorage.getItem('ebms_theme_mode') || 'light';
+    } catch {
+      return 'light';
+    }
+  });
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [previewMode, setPreviewMode] = useState(true);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ebms_theme_mode', themeMode);
+    } catch {
+      // ignore
+    }
+  }, [themeMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ebms_sidebar_collapsed', String(sidebarCollapsed));
+    } catch {
+      // ignore
+    }
+  }, [sidebarCollapsed]);
 
   const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
+    setSidebarCollapsed((prev) => !prev);
   };
 
   const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
+    setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
+
+  const muiTheme = useMemo(() => getTheme(themeMode), [themeMode]);
 
   return (
     <AppContext.Provider
       value={{
-        sidebarOpen,
+        sidebarCollapsed,
+        setSidebarCollapsed,
         toggleSidebar,
-        theme,
+        theme: themeMode,
+        themeMode,
         toggleTheme,
+        searchOpen,
+        setSearchOpen,
+        previewMode,
+        setPreviewMode,
       }}
     >
-      {children}
+      <ThemeProvider theme={muiTheme}>
+        <CssBaseline />
+        {children}
+      </ThemeProvider>
     </AppContext.Provider>
   );
 };

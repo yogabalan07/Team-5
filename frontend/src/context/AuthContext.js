@@ -103,6 +103,28 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginDemo = async (role = 'ADMIN') => {
+    try {
+      const data = await authService.loginDemo(role);
+      let roles = [];
+      if (data.roles && Array.isArray(data.roles)) {
+        roles = data.roles;
+      } else if (data.role) {
+        const roleName = data.role.startsWith('ROLE_') ? data.role : `ROLE_${data.role}`;
+        roles = [{ name: roleName }];
+      }
+      const userData = { ...data, roles };
+      setUser(userData);
+      setIsAuthenticated(true);
+      toast.success(`Signed in as ${userData.fullName} (${userData.role.replace(/^ROLE_/, '')})`);
+      return { success: true, user: userData };
+    } catch (error) {
+      const errorMsg = error.message || 'Demo sign-in failed';
+      toast.error(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+  };
+
   const logout = () => {
     authService.logout();
     setUser(null);
@@ -128,6 +150,7 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         login,
+        loginDemo,
         logout,
         isAuthenticated,
         loading,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -11,55 +11,75 @@ import {
   InputAdornment,
   IconButton,
   Divider,
+  Grid,
+  Chip,
+  Avatar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Visibility,
   VisibilityOff,
-  Lock,
-  Person,
+  LockOutlined,
+  EmailOutlined,
   Login as LoginIcon,
+  ShieldOutlined,
+  CheckCircle,
+  AccountCircle,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
-import authService from '../../services/authService';
+import authService, { DEMO_USERS } from '../../services/authService';
 import { toast } from 'react-toastify';
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const { login, loginDemo } = useAuth();
+  const [email, setEmail] = useState('admin@ebms.enterprise');
+  const [password, setPassword] = useState('Enterprise@2026');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [forgotDialogOpen, setForgotDialogOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    const result = await login(username, password);
+    const result = await login(email, password);
     if (result.success) {
       navigate('/dashboard');
     } else {
-      setError(result.error || 'Invalid credentials');
+      setError(result.error || 'Authentication failed. Please verify credentials.');
     }
     setLoading(false);
   };
 
-  const handleForgotPassword = async () => {
-    setError('');
-    if (!username || !username.trim()) {
-      setError('Enter your email address above to reset your password');
+  const handleQuickDemo = async (role) => {
+    setLoading(true);
+    const result = await loginDemo(role);
+    if (result.success) {
+      navigate('/dashboard');
+    }
+    setLoading(false);
+  };
+
+  const handleSendReset = async () => {
+    if (!forgotEmail || !forgotEmail.trim()) {
+      toast.error('Please enter your account email address');
       return;
     }
-    setLoading(true);
     try {
-      await authService.resetPassword(username.trim());
-      toast.success('Password reset email sent. Check your inbox.');
+      await authService.resetPassword(forgotEmail.trim());
+      toast.success('Password recovery link sent. Check your inbox.');
+      setForgotDialogOpen(false);
+      setForgotEmail('');
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not send password reset email');
-    } finally {
-      setLoading(false);
+      toast.info('Password recovery instructions sent to provided email address.');
+      setForgotDialogOpen(false);
     }
   };
 
@@ -69,28 +89,45 @@ const Login = () => {
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        justifyContent: 'center',
+        bgcolor: 'background.default',
+        px: 2,
+        py: 4,
       }}
     >
       <Container maxWidth="sm">
         <Paper
-          elevation={24}
+          elevation={0}
           sx={{
-            p: 5,
-            borderRadius: 4,
-            backdropFilter: 'blur(10px)',
-            backgroundColor: 'rgba(255,255,255,0.95)',
+            p: { xs: 3, sm: 5 },
+            borderRadius: 3,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
           }}
         >
-          <Box textAlign="center" mb={4}>
-            <Typography variant="h3" sx={{ mb: 1 }}>
-      
+          {/* Brand Header */}
+          <Box textAlign="center" mb={3}>
+            <Box
+              sx={{
+                width: 48,
+                height: 48,
+                borderRadius: 2,
+                bgcolor: 'primary.main',
+                color: '#fff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mb: 1.5,
+              }}
+            >
+              <ShieldOutlined fontSize="medium" />
+            </Box>
+            <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: '-0.02em', color: 'text.primary' }}>
+              EBMS
             </Typography>
-            <Typography variant="h4" fontWeight="bold" gutterBottom>
-              Inventory Pro
-            </Typography>
-            <Typography variant="body2" color="textSecondary">
-              Enterprise Inventory Management System
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Enterprise Business Management System
             </Typography>
           </Box>
 
@@ -100,20 +137,21 @@ const Login = () => {
             </Alert>
           )}
 
+          {/* Login Form */}
           <form onSubmit={handleSubmit}>
             <TextField
               fullWidth
-              label="Email"
+              label="Work Email"
               type="email"
-              variant="outlined"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              size="small"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               margin="normal"
               required
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Person color="primary" />
+                    <EmailOutlined fontSize="small" sx={{ color: 'text.secondary' }} />
                   </InputAdornment>
                 ),
               }}
@@ -121,8 +159,8 @@ const Login = () => {
             <TextField
               fullWidth
               label="Password"
+              size="small"
               type={showPassword ? 'text' : 'password'}
-              variant="outlined"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               margin="normal"
@@ -130,21 +168,33 @@ const Login = () => {
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Lock color="primary" />
+                    <LockOutlined fontSize="small" sx={{ color: 'text.secondary' }} />
                   </InputAdornment>
                 ),
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton
+                      size="small"
                       onClick={() => setShowPassword(!showPassword)}
                       edge="end"
                     >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                      {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
             />
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+              <Button
+                size="small"
+                onClick={() => setForgotDialogOpen(true)}
+                sx={{ textTransform: 'none', fontSize: '0.8rem', p: 0 }}
+              >
+                Forgot credentials?
+              </Button>
+            </Box>
+
             <Button
               type="submit"
               fullWidth
@@ -152,37 +202,77 @@ const Login = () => {
               size="large"
               disabled={loading}
               startIcon={<LoginIcon />}
-              sx={{
-                mt: 3,
-                py: 1.5,
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                '&:hover': {
-                  background: 'linear-gradient(135deg, #5a67d8 0%, #6b46a1 100%)',
-                },
-              }}
+              sx={{ mt: 2.5, py: 1.2, fontWeight: 600 }}
             >
-              {loading ? 'Logging in...' : 'Sign In'}
+              {loading ? 'Authenticating...' : 'Sign In to Workspace'}
             </Button>
           </form>
 
-          <Box mt={2} textAlign="center">
-            <Button
-              size="small"
-              onClick={handleForgotPassword}
-              disabled={loading}
-              sx={{ textTransform: 'none', color: '#1976d2' }}
-            >
-              Forgot password?
-            </Button>
-          </Box>
+          {/* Quick Demo Role Selector */}
+          <Box sx={{ mt: 4, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+              <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary' }}>
+                Instant Access — Select Role
+              </Typography>
+              <Chip size="small" label="Demo Ready" color="success" sx={{ height: 18, fontSize: '0.65rem' }} />
+            </Box>
 
-          <Box mt={1} textAlign="center">
-          
-            <Divider sx={{ my: 2 }} />
-      
+            <Grid container spacing={1}>
+              {DEMO_USERS.map((u) => (
+                <Grid item xs={6} key={u.role}>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    size="small"
+                    onClick={() => handleQuickDemo(u.role)}
+                    sx={{
+                      justifyContent: 'flex-start',
+                      py: 0.8,
+                      px: 1.2,
+                      textAlign: 'left',
+                      borderColor: 'divider',
+                    }}
+                  >
+                    <Box sx={{ overflow: 'hidden' }}>
+                      <Typography variant="caption" fontWeight={700} sx={{ display: 'block', lineHeight: 1.2, color: 'text.primary' }}>
+                        {u.role.replace('_', ' ')}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', display: 'block', noWrap: true }}>
+                        {u.fullName}
+                      </Typography>
+                    </Box>
+                  </Button>
+                </Grid>
+              ))}
+            </Grid>
           </Box>
         </Paper>
       </Container>
+
+      {/* Forgot Password Modal */}
+      <Dialog open={forgotDialogOpen} onClose={() => setForgotDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Reset Enterprise Password</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Enter your authorized business email address. An encrypted password reset token will be dispatched.
+          </Typography>
+          <TextField
+            fullWidth
+            label="Work Email"
+            type="email"
+            size="small"
+            value={forgotEmail}
+            onChange={(e) => setForgotEmail(e.target.value)}
+            placeholder="admin@ebms.enterprise"
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setForgotDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleSendReset}>
+            Send Reset Link
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

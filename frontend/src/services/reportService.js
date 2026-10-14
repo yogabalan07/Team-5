@@ -36,6 +36,25 @@ function filterIds(value, allowed) {
   return allowed.includes(String(value));
 }
 
+// Reconstruct the signed stock movement recorded by a stockTransactions
+// journal entry (see inventoryOps.applyStockLine).
+//
+// Two shapes are written to Firestore:
+//   - PURCHASE / SALES / STOCK_IN / STOCK_OUT / returns store a POSITIVE
+//     `quantity` together with a `sign` (+1 inward, -1 outward).
+//   - ADJUSTMENT (SET) stores an ALREADY-SIGNED delta
+//     (`stockAfter - stockBefore`) that also carries a `sign`.
+// Multiplying an adjustment's signed delta by its `sign` again would
+// double-negate stock decreases, so `sign` is only applied to positive
+// magnitudes (legacy entries that stored a negative quantity are preserved).
+function movementQuantity(journal) {
+  const quantity = Number(journal && journal.quantity) || 0;
+  if (String(journal && journal.type) === 'ADJUSTMENT' || quantity < 0) {
+    return quantity;
+  }
+  return quantity * (Number(journal && journal.sign) === -1 ? -1 : 1);
+}
+
 async function fetchAll(collectionName) {
   ensureDb();
   const snap = await _getDocs(col(collectionName));
@@ -231,13 +250,14 @@ export const reportService = {
         const key = String(j.transactionDate || '').slice(0, 10);
         return filters.endDate && key > String(filters.endDate).slice(0, 10);
       });
-      const netInRange = inRange.reduce((s, j) => s + (Number(j.quantity) * (Number(j.sign) === -1 ? -1 : 1)), 0);
-      const netAfter = after.reduce((s, j) => s + (Number(j.quantity) * (Number(j.sign) === -1 ? -1 : 1)), 0);
+      const inRangeMoves = inRange.map(movementQuantity);
+      const netInRange = inRangeMoves.reduce((s, q) => s + q, 0);
+      const netAfter = after.reduce((s, j) => s + movementQuantity(j), 0);
       const currentStock = Number(item.currentStock) || 0;
       const closing = round2(currentStock - netAfter);
       const opening = round2(closing - netInRange);
-      const purchases = round2(inRange.filter((j) => Number(j.sign) === 1).reduce((s, j) => s + Number(j.quantity), 0));
-      const sales = round2(inRange.filter((j) => Number(j.sign) === -1).reduce((s, j) => s + Number(j.quantity), 0));
+      const purchases = round2(inRangeMoves.reduce((s, q) => s + Math.max(q, 0), 0));
+      const sales = round2(inRangeMoves.reduce((s, q) => s + Math.abs(Math.min(q, 0)), 0));
       return {
         id: item.id,
         itemCode: item.itemCode,

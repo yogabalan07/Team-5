@@ -1,4 +1,4 @@
-import { applyStockLine, TYPE_SALES, TYPE_PURCHASE, TYPE_SALES_RETURN } from '../inventoryOps';
+import { applyStockLine, TYPE_SALES, TYPE_PURCHASE, TYPE_SALES_RETURN, TYPE_ADJUSTMENT } from '../inventoryOps';
 
 jest.mock('@firebase/firestore', () => {
   const actual = jest.requireActual('@firebase/firestore');
@@ -135,5 +135,23 @@ describe('applyStockLine', () => {
     await expect(applyStockLine(tx, { itemId: '', qty: 5, sign: 1, type: TYPE_PURCHASE })).resolves.toEqual({ itemId: '', quantity: 0 });
     expect(tx.update).not.toHaveBeenCalled();
     expect(tx.set).not.toHaveBeenCalled();
+  });
+
+  test('ADJUSTMENT can set stock to zero (regression)', async () => {
+    const tx = makeTx(snap({ name: 'Apple', currentStock: 10, minStock: 0 }));
+    const result = await applyStockLine(tx, {
+      itemId: 'item-1',
+      itemName: 'Apple',
+      qty: 0,
+      sign: -1,
+      type: TYPE_ADJUSTMENT,
+      reason: 'Physical Count Difference',
+    });
+    expect(tx.update).toHaveBeenCalledTimes(1);
+    expect(tx.update.mock.calls[0][1].currentStock).toBe(0);
+    expect(tx.update.mock.calls[0][1].isOutOfStock).toBe(true);
+    expect(tx.set).toHaveBeenCalledTimes(1);
+    expect(tx.set.mock.calls[0][1].quantity).toBe(-10);
+    expect(result.stockAfter).toBe(0);
   });
 });

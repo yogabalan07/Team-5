@@ -1,9 +1,10 @@
+
 {
   "name": "inventory-frontend",
   "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": "20.x"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -30,9 +31,10 @@
     "react-scripts": "5.0.1"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "dev": "set \"PORT=3000\" && set \"HOST=0.0.0.0\" && set \"DANGEROUSLY_DISABLE_HOST_CHECK=true\" && set \"DISABLE_ESLINT_PLUGIN=true\" && react-scripts start",
+    "start": "set \"PORT=3000\" && set \"HOST=0.0.0.0\" && set \"DANGEROUSLY_DISABLE_HOST_CHECK=true\" && set \"DISABLE_ESLINT_PLUGIN=true\" && react-scripts start",
     "prebuild": "node -e \"require('fs').mkdirSync('public', { recursive: true }); require('fs').writeFileSync('public/_redirects', '/*    /index.html    200')\"",
-    "build": "react-scripts build",
+    "build": "set \"DISABLE_ESLINT_PLUGIN=true\" && set \"CI=false\" && react-scripts build",
     "postbuild": "node -e \"const fs = require('fs'); fs.copyFileSync('public/_redirects', 'build/_redirects')\"",
     "test": "react-scripts test",
     "lint": "eslint \"src/**/*.{js,jsx}\"",

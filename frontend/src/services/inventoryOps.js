@@ -85,7 +85,10 @@ export async function applyStockLine(tx, {
   reason = '',
 }) {
   const quantity = Number(qty) || 0;
-  if (!itemId || quantity <= 0) return { itemId, quantity: 0 };
+  // ADJUSTMENT (mode SET) may legitimately target zero to clear stock down to 0.
+  if (!itemId || (quantity <= 0 && type !== TYPE_ADJUSTMENT)) {
+    return { itemId, quantity: 0 };
+  }
 
   const stockMove = TYPE_TO_STOCK_MOVE[type];
   if (!stockMove) {
