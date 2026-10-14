@@ -1,0 +1,8 @@
+{
+  "name": "EBMS - Enterprise Business Management System",
+  "description": "Comprehensive enterprise operations, supply chain, financial ledger, and inventory platform.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ],
+  "permissions": []
+}

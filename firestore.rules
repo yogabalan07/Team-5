@@ -1,0 +1,372 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------
+    // Helpers
+    //
+    // Roles and account status live in the user's profile document
+    // (users/{uid}.role and users/{uid}.isActive). The profile is the sole
+    // source of truth; no custom claims are involved. The profile is created
+    // by the user themselves during self-registration (forced STAFF) or by the
+    // first-admin bootstrap (below), and can only be changed by an ADMIN.
+    // ------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // Enabled = signed in AND that user's profile says active.
+    function isEnabled() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true;
+    }
+
+    function profileRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isEnabled() && profileRole() == 'ADMIN';
+    }
+
+    function hasAny(roles) {
+      return isEnabled() && profileRole() in roles;
+    }
+
+    function isValidRole(role) {
+      return role in ['ADMIN', 'BILLING_CLERK', 'ACCOUNTS', 'PURCHASE_MANAGER', 'STORE_MANAGER', 'STAFF'];
+    }
+
+    // True when an update touches ONLY the listed fields. Used to let the
+    // transactional service flows (sales/billing-clerk, purchase-manager,
+    // accounts) adjust derived counters (stock levels, invoice balances, party
+    // credit balances) without granting those roles full write access to the
+    // master records.
+    function changesOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // ------------------------------------------------------------------
+    // bootstrap — first-admin gate.
+    //
+    // On a fresh system NO account can create an ADMIN profile unless it first
+    // secures bootstrap/lock. The app claims the lock first (its own commit)
+    // and then creates the matching ADMIN profile in a second commit, so the
+    // profile create below can actually get() the committed lock — security
+    // rules evaluate get()/exists() against COMMITTED state and cannot see
+    // writes that are part of the same transaction. Every later registration
+    // sees the lock and is forced to STAFF. A claim can only be made by an
+    // account that does not have a profile yet, and only that same account
+    // can release a claim that never got a profile (e.g. after a failed
+    // registration). Once a profile exists the lock is permanent, and admin
+    // rights can only be granted by an ADMIN.
+    // ------------------------------------------------------------------
+    match /bootstrap/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        docId == 'lock' &&
+        request.resource.data.adminUid == request.auth.uid &&
+        !exists(/databases/$(database)/documents/bootstrap/lock) &&
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      allow update: if false;
+      allow delete: if isSignedIn() &&
+        docId == 'lock' &&
+        resource.data.adminUid == request.auth.uid &&
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // ------------------------------------------------------------------
+    // usernames — one reservation doc per account so self-registration keeps
+    // the unique-username guarantee WITHOUT a pre-auth query over `users`
+    // (the users rules rightly forbid unauthenticated access, which is what
+    // broke registration). Written in the same transaction that claims the
+    // bootstrap lock; readable only by signed-in users; each doc belongs to
+    // the uid that reserved it.
+    // ------------------------------------------------------------------
+    match /usernames/{uname} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.usernameLower == uname;
+      allow update: if false;
+      allow delete: if isAdmin() ||
+        (isSignedIn() &&
+          resource.data.uid == request.auth.uid &&
+          !exists(/databases/$(database)/documents/users/$(request.auth.uid)));
+    }
+
+    // ------------------------------------------------------------------
+    // users — the only collection a client ever creates.
+    //   - create: the signed-in user may create ONLY their own profile,
+    //     forced to STAFF + active; the bootstrap lock holder may create the
+    //     ADMIN profile. No other creation path exists.
+    //   - update: ADMIN only. An admin may manage any OTHER user directly
+    //     (role/status/profile). An admin may update their OWN profile only in
+    //     ways that keep it ADMIN + active, so a locked system can't be
+    //     created by a self-demotion or self-deactivation.
+    //   - delete: never (accounts are deactivated, not removed; auth identity
+    //     deletion requires the Admin SDK which is unavailable on Spark).
+    // ------------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+      allow create: if isSignedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.isActive == true &&
+        (
+          request.resource.data.role == 'STAFF' ||
+          (request.resource.data.role == 'ADMIN' &&
+            get(/databases/$(database)/documents/bootstrap/lock).data.adminUid == request.auth.uid)
+        );
+      allow update: if isAdmin() &&
+        (
+          (request.auth.uid == userId &&
+            request.resource.data.role == 'ADMIN' &&
+            request.resource.data.isActive == true) ||
+          (request.auth.uid != userId &&
+            isValidRole(request.resource.data.role))
+        );
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // roles — static roster read by any enabled user; written by admins.
+    // ------------------------------------------------------------------
+    match /roles/{roleId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Master data
+    // ------------------------------------------------------------------
+    match /customers/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']) ||
+        (hasAny(['ACCOUNTS']) && changesOnly(['creditBalance', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    match /customerGroups/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'BILLING_CLERK']);
+    }
+
+    match /suppliers/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']) ||
+        (hasAny(['ACCOUNTS']) && changesOnly(['creditBalance', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    match /supplierGroups/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+    }
+
+    match /itemBrands/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /categories/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /priceLists/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /itemGroups/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /itemSections/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /units/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'STORE_MANAGER']);
+    }
+
+    match /taxes/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /items/{docId} {
+      allow read: if isEnabled();
+      allow create: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      // Full item edits stay with admins/store managers; billing clerks and
+      // purchase managers may only move stock counters inside the atomic
+      // invoice transactions (currentStock + derived flags).
+      allow update: if hasAny(['ADMIN', 'STORE_MANAGER']) ||
+        (hasAny(['BILLING_CLERK', 'PURCHASE_MANAGER']) &&
+          changesOnly(['currentStock', 'isLowStock', 'isOutOfStock', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Purchases
+    // ------------------------------------------------------------------
+    match /purchaseOrders/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /purchaseRequisitions/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /supplierQuotations/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /debitNotes/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER', 'ACCOUNTS']);
+      allow delete: if isAdmin();
+    }
+
+    match /purchaseInvoices/{docId} {
+      allow read: if isEnabled();
+      allow create: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']) ||
+        (hasAny(['ACCOUNTS']) && changesOnly(['balanceAmount', 'paymentStatus', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Sales
+    // ------------------------------------------------------------------
+    match /salesQuotations/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow delete: if isAdmin();
+    }
+
+    match /salesOrders/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow delete: if isAdmin();
+    }
+
+    match /deliveries/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /salesInvoices/{docId} {
+      allow read: if isEnabled();
+      allow create: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow update: if hasAny(['ADMIN', 'BILLING_CLERK']) ||
+        (hasAny(['ACCOUNTS']) && changesOnly(['balanceAmount', 'paymentStatus', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    match /salesReturns/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK']);
+      allow delete: if isAdmin();
+    }
+
+    match /creditNotes/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'BILLING_CLERK', 'ACCOUNTS']);
+      allow delete: if isAdmin();
+    }
+
+    match /purchaseReturns/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'PURCHASE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Accounts
+    // ------------------------------------------------------------------
+    match /billReceipts/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'ACCOUNTS']);
+    }
+
+    match /billPayments/{docId} {
+      allow read: if isEnabled();
+      allow create, update, delete: if hasAny(['ADMIN', 'ACCOUNTS']);
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 7 — expenses and payment vouchers (finance)
+    // ------------------------------------------------------------------
+    match /expenses/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'ACCOUNTS']);
+      allow delete: if isAdmin();
+    }
+
+    match /paymentVouchers/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'ACCOUNTS']);
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Counters — written automatically by transactional services to issue
+    // collision-free document numbers. Creates/updates need a signed-in,
+    // enabled user; deletes are admin-only.
+    // ------------------------------------------------------------------
+    match /counters/{counterId} {
+      allow read: if isEnabled();
+      allow create, update: if isEnabled();
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Stock journal — read by reports; written by transactional services.
+    // ------------------------------------------------------------------
+    match /stockTransactions/{docId} {
+      allow read: if isEnabled();
+      allow create: if isEnabled();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Warehouses & stock transfers
+    // ------------------------------------------------------------------
+    match /warehouses/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /warehouseLocations/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /warehouseStock/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER', 'BILLING_CLERK', 'PURCHASE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+
+    match /stockTransfers/{docId} {
+      allow read: if isEnabled();
+      allow create, update: if hasAny(['ADMIN', 'STORE_MANAGER']);
+      allow delete: if isAdmin();
+    }
+  }
+}

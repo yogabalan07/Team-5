@@ -1,0 +1,36 @@
+node_modules/
+build/
+dist/
+target/
+.cache/
+*.log
+logs/
+db-debug.log
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment / secrets (never commit real values)
+.env
+.env.*
+!.env.example
+
+# Firebase
+.firebase/
+*.cache
+firebase-debug.log
+firestore-debug.log
+emu-*.log
+emu-pid.txt
+scripts-rulecheck/
+
+# OS artifacts
+*.msi
+*.exe
+*.dmg
+*.iso
+*.jar
+*.war

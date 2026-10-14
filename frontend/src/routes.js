@@ -1,0 +1,84 @@
+export const ROUTES = {
+  LOGIN: '/login',
+  REGISTER: '/register',
+  DASHBOARD: '/dashboard',
+  
+  // Customers
+  CUSTOMERS: '/customers',
+  CUSTOMER_NEW: '/customers/new',
+  CUSTOMER_EDIT: '/customers/edit/:id',
+  CUSTOMER_GROUPS: '/customers/groups',
+  
+  // Suppliers
+  SUPPLIERS: '/suppliers',
+  SUPPLIER_NEW: '/suppliers/new',
+  SUPPLIER_EDIT: '/suppliers/edit/:id',
+  SUPPLIER_GROUPS: '/suppliers/groups',
+  
+  // Items
+  ITEMS: '/items',
+  ITEM_NEW: '/items/new',
+  ITEM_EDIT: '/items/edit/:id',
+  ITEM_CATEGORIES: '/items/categories',
+  ITEM_BRANDS: '/items/brands',
+  ITEM_GROUPS: '/items/groups',
+  ITEM_UNITS: '/items/units',
+  ITEM_TAXES: '/items/taxes',
+  ITEM_PRICELISTS: '/items/price-lists',
+  ITEM_BATCHES: '/items/batches',
+  ITEM_SERIALS: '/items/serials',
+  
+  // Sales
+  SALES_ENTRY: '/sales/entry',
+  SALES_LIST: '/sales/list',
+  SALES_INVOICE: '/sales/invoice/:id',
+  SALES_QUOTATIONS: '/sales/quotations',
+  SALES_QUOTATION_NEW: '/sales/quotations/new',
+  SALES_QUOTATION_EDIT: '/sales/quotations/edit/:id',
+  SALES_ORDERS: '/sales/orders',
+  SALES_ORDER_NEW: '/sales/orders/new',
+  SALES_ORDER_EDIT: '/sales/orders/edit/:id',
+  SALES_DELIVERIES: '/sales/deliveries',
+  SALES_CREDIT_NOTES: '/sales/credit-notes',
+  SALES_RETURN: '/sales/return',
+  
+  // Purchases
+  PURCHASE_ORDER: '/purchases/order',
+  PURCHASE_ENTRY: '/purchases/entry',
+  PURCHASE_REQUISITIONS: '/purchases/requisitions',
+  PURCHASE_QUOTATIONS: '/purchases/quotations',
+  PURCHASE_ORDERS: '/purchases/orders',
+  PURCHASE_GRN: '/purchases/grn',
+  PURCHASE_DEBIT_NOTES: '/purchases/debit-notes',
+  
+  // Inventory
+  INVENTORY: '/inventory',
+  INVENTORY_LOW_STOCK: '/inventory/low-stock',
+  INVENTORY_LEDGER: '/inventory/ledger',
+  INVENTORY_TRANSFERS: '/inventory/transfers',
+
+  // Warehouses
+  WAREHOUSES: '/warehouses',
+  WAREHOUSE_LOCATIONS: '/warehouses/locations',
+  WAREHOUSE_STOCK: '/warehouses/stock',
+
+  // Accounts
+  ACCOUNTS_RECEIPTS: '/accounts/receipts',
+  ACCOUNTS_PAYMENTS: '/accounts/payments',
+  ACCOUNTS_LEDGER: '/accounts/ledger',
+  ACCOUNTS_RECEIVABLES: '/accounts/receivables',
+  ACCOUNTS_PAYABLES: '/accounts/payables',
+  ACCOUNTS_CASHBOOK: '/accounts/cashbook',
+  ACCOUNTS_EXPENSES: '/accounts/expenses',
+  ACCOUNTS_VOUCHERS: '/accounts/vouchers',
+  ACCOUNTS_SUMMARY: '/accounts/summary',
+  
+  // Reports
+  REPORTS_SALES: '/reports/sales',
+  REPORTS_STOCK: '/reports/stock',
+
+  // Administration
+  ADMIN_USERS: '/admin/users',
+  ADMIN_ROLES: '/admin/roles',
+  ADMIN_AUDIT_LOGS: '/admin/audit-logs',
+};
